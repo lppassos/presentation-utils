@@ -6,13 +6,13 @@ markdown source files, using `asciidoctor` and `marp`.
 ## Build
 
 ```bash
-docker build -t presentations-utils .
+docker build -t presentation-utils .
 ```
 
 Optional: pin draw.io desktop version at build time:
 
 ```bash
-docker build -t presentations-utils --build-arg DRAWIO_VERSION=24.7.17 .
+docker build -t presentation-utils --build-arg DRAWIO_VERSION=24.7.17 .
 ```
 
 ## Usage
@@ -30,7 +30,7 @@ Notes:
 Show available commands:
 
 ```bash
-docker run --rm presentations-utils
+docker run --rm presentation-utils
 ```
 
 ### Convert AsciiDoc/Markdown to PDF
@@ -41,38 +41,38 @@ PowerShell:
 docker run --rm \
   -v "${PWD}:/work" \
   -v "${HOME}/Documents/asciidoctor_styles:/themes/asciidoctor:ro" \
-  convertto-pdf documento.adoc --theme mytheme-2025
+  presentation-utils convertto-pdf documento.adoc --theme mytheme-2025
 ```
 
 Markdown input auto-converts to `.adoc` first:
 
 ```bash
-docker run --rm -v "${PWD}:/work" convertto-pdf documento.md
+docker run --rm -v "${PWD}:/work" presentation-utils convertto-pdf documento.md
 ```
 
 Pass extra asciidoctor args after `--`:
 
 ```bash
 docker run --rm -v "${PWD}:/work" \
-  convertto-pdf documento.adoc -- --failure-level=WARN
+  presentation-utils convertto-pdf documento.adoc -- --failure-level=WARN
 ```
 
 Optimize/linearize (creates `*-out.pdf`):
 
 ```bash
-docker run --rm -v "${PWD}:/work" convertto-pdf documento.adoc --optimize
+docker run --rm -v "${PWD}:/work" presentation-utils convertto-pdf documento.adoc --optimize
 ```
 
 ### Convert Markdown to AsciiDoc
 
 ```bash
-docker run --rm -v "${PWD}:/work" convertto-asciidoc documento.md
+docker run --rm -v "${PWD}:/work" presentation-utils convertto-asciidoc documento.md
 ```
 
 ### Convert draw.io to PNG
 
 ```bash
-docker run --rm -v "${PWD}:/work" convertto-png diagrama.drawio
+docker run --rm -v "${PWD}:/work" presentation-utils convertto-png diagrama.drawio
 ```
 
 ### Convert Marp Markdown to PDF/HTML
@@ -85,19 +85,19 @@ PowerShell:
 docker run --rm \
   -v "${PWD}:/work" \
   -v "${HOME}/Documents/marp_styles:/themes/marp:ro" \
-  convertto-presentation deck.md --format pdf
+  presentation-utils convertto-presentation deck.md --format pdf
 ```
 
 HTML:
 
 ```bash
-docker run --rm -v "${PWD}:/work" convertto-marp deck.md --format html
+docker run --rm -v "${PWD}:/work" presentation-utils convertto-marp deck.md --format html
 ```
 
 Pass extra marp args after `--`:
 
 ```bash
-docker run --rm -v "${PWD}:/work" convertto-marp deck.md -- --bespoke.progress
+docker run --rm -v "${PWD}:/work" presentation-utils convertto-marp deck.md -- --bespoke.progress
 ```
 
 ## Git Bash / MSYS2
@@ -105,5 +105,5 @@ docker run --rm -v "${PWD}:/work" convertto-marp deck.md -- --bespoke.progress
 When running from Git Bash on Windows, disable path conversion:
 
 ```bash
-MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W):/work" convertto-pdf documento.adoc
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W):/work" presentation-utils convertto-pdf documento.adoc
 ```
