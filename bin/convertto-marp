@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  convertto-marp <path.md> [--format pdf|html] [--theme <name|path>] [--output <path>] [--no-local-files] [--notes] [-- <extra marp args>]
+
+Notes:
+  - Themes are read from $MARP_THEMES_DIR (default: /themes/marp)
+  - If --theme is omitted and $MARP_THEMES_DIR/default-theme exists, it will be used
+  - Theme name resolves to $MARP_THEMES_DIR/<name>.css
+EOF
+}
+
+path=""
+format="pdf"
+theme=""
+output=""
+allow_local_files=1
+notes=0
+extra=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --format)
+      format=${2:-}
+      shift 2
+      ;;
+    -Theme|--theme)
+      theme=${2:-}
+      shift 2
+      ;;
+    -Output|--output|-o)
+      output=${2:-}
+      shift 2
+      ;;
+    --no-local-files)
+      allow_local_files=0
+      shift
+      ;;
+    --notes)
+      notes=1
+      shift
+      ;;
+    --)
+      shift
+      extra+=("$@")
+      break
+      ;;
+    -* )
+      extra+=("$1")
+      shift
+      ;;
+    *)
+      if [[ -z "$path" ]]; then
+        path="$1"
+      else
+        extra+=("$1")
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$path" ]]; then
+  usage
+  exit 2
+fi
+
+if [[ ! -f "$path" ]]; then
+  echo "ERROR: File not found: $path" >&2
+  exit 2
+fi
+
+if [[ "$format" != "pdf" && "$format" != "html" ]]; then
+  echo "ERROR: Unsupported --format: $format (expected: pdf|html)" >&2
+  exit 2
+fi
+
+MARP_THEMES_DIR=${MARP_THEMES_DIR:-/themes/marp}
+
+if [[ -z "$theme" && -f "$MARP_THEMES_DIR/default-theme" ]]; then
+  theme="$(tr -d '\r\n' < "$MARP_THEMES_DIR/default-theme" | xargs)"
+fi
+
+base="$path"
+if [[ "$path" == *.* ]]; then
+  base="${path%.*}"
+fi
+
+if [[ -z "$output" ]]; then
+  if [[ "$format" == "pdf" ]]; then
+    output="${base}.pdf"
+  else
+    output="${base}.html"
+  fi
+fi
+
+if [[ -z "$theme" ]]; then
+  echo "ERROR: Theme not provided and default theme not configured. Create $MARP_THEMES_DIR/default-theme or pass --theme <name|path>." >&2
+  exit 2
+fi
+
+theme_path="$theme"
+if [[ ! -f "$theme_path" ]]; then
+  theme_path="$MARP_THEMES_DIR/${theme}.css"
+fi
+
+if [[ ! -f "$theme_path" ]]; then
+  echo "ERROR: Theme not found: '$theme'. Expected '$theme_path'." >&2
+  exit 2
+fi
+
+compiled_theme=""
+cleanup() {
+  if [[ -n "${compiled_theme:-}" && -f "${compiled_theme:-}" ]]; then
+    rm -f "$compiled_theme" || true
+  fi
+}
+trap cleanup EXIT
+
+compiled_theme="$(node /usr/local/lib/marp-theme-embed.js --input "$theme_path")"
+
+marp_args=()
+if [[ "$format" == "pdf" ]]; then
+  marp_args+=(--pdf)
+fi
+
+if [[ "$allow_local_files" -eq 1 ]]; then
+  marp_args+=(--allow-local-files)
+fi
+
+if [[ "$notes" -eq 1 ]]; then
+  marp_args+=(--pdf-notes)
+fi
+
+marp_args+=("$path" -o "$output" --theme "$compiled_theme")
+
+marp "${marp_args[@]}" "${extra[@]}"

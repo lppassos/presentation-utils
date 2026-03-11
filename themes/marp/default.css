@@ -1,0 +1,21 @@
+/*
+  Minimal default Marp theme for container usage.
+  Users can mount their own themes into /themes/marp.
+*/
+
+@theme default;
+
+section {
+  font-family: "Liberation Sans", "DejaVu Sans", sans-serif;
+  font-size: 32px;
+  padding: 60px;
+}
+
+h1 {
+  font-size: 56px;
+  margin: 0 0 24px;
+}
+
+ul {
+  margin: 16px 0 0 24px;
+}

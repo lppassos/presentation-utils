@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage:
+  convertto-pdf <path.(adoc|md)> [--theme <name>] [--optimize] [-- <extra asciidoctor args>]
+
+Notes:
+  - Themes are read from $PDF_THEMES_DIR (default: /themes)
+  - If --theme is omitted and $PDF_THEMES_DIR/default-theme exists, it will be used
+EOF
+}
+
+path=""
+theme=""
+optimize=0
+extra=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -Path|--path)
+      path=${2:-}
+      shift 2
+      ;;
+    -Theme|--theme)
+      theme=${2:-}
+      shift 2
+      ;;
+    -Optimize|--optimize)
+      optimize=1
+      shift
+      ;;
+    --)
+      shift
+      extra+=("$@")
+      break
+      ;;
+    -*)
+      # unknown flag: treat as extra asciidoctor arg
+      extra+=("$1")
+      shift
+      ;;
+    *)
+      if [[ -z "$path" ]]; then
+        path="$1"
+      else
+        extra+=("$1")
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$path" ]]; then
+  usage
+  exit 2
+fi
+
+if [[ ! -f "$path" ]]; then
+  echo "ERROR: File not found: $path" >&2
+  exit 2
+fi
+
+PDF_THEMES_DIR=${PDF_THEMES_DIR:-/themes}
+
+if [[ -z "$theme" && -f "$PDF_THEMES_DIR/default-theme" ]]; then
+  theme="$(tr -d '\r\n' < "$PDF_THEMES_DIR/default-theme" | xargs)"
+fi
+
+base="$path"
+if [[ "$path" == *.* ]]; then
+  base="${path%.*}"
+fi
+
+ext="${path##*.}"
+if [[ "$ext" == "md" ]]; then
+  convertto-asciidoc "$path"
+  path="${base}.adoc"
+fi
+
+mkdir -p .imggen
+
+asciidoctor_args=(
+  -r asciidoctor-pdf
+  -r asciidoctor-diagram
+  -b pdf
+  -o "${base}.pdf"
+  -v
+  "$path"
+  -a imagesoutdir=.imggen
+  -a "pdf-themesdir=${PDF_THEMES_DIR}"
+  -a "pdf-fontsdir=${PDF_THEMES_DIR}/fonts"
+  -a compress
+)
+
+if [[ -n "$theme" ]]; then
+  asciidoctor_args+=( -a "pdf-theme=${theme}" )
+fi
+
+asciidoctor "${asciidoctor_args[@]}" "${extra[@]}"
+
+if [[ "$optimize" -eq 1 ]]; then
+  qpdf "${base}.pdf" --linearize "${base}-out.pdf"
+fi

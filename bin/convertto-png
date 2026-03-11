@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: convertto-png <path.drawio>
+EOF
+}
+
+if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+path=${1:-}
+if [[ -z "$path" ]]; then
+  usage
+  exit 2
+fi
+
+if [[ ! -f "$path" ]]; then
+  echo "ERROR: File not found: $path" >&2
+  exit 2
+fi
+
+base="$path"
+if [[ "$path" == *.* ]]; then
+  base="${path%.*}"
+fi
+
+# drawio is a desktop app; run it headlessly.
+xvfb-run -a drawio --no-sandbox -x -f png -o "${base}.png" "$path"
