@@ -88,6 +88,7 @@ mkdir -p .imggen
 asciidoctor_args=(
   -r asciidoctor-pdf
   -r asciidoctor-diagram
+  -r /plugins/asciidoctor/gantt-diagram/extension.rb
   -b pdf
   -o "${base}.pdf"
   -v

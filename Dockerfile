@@ -59,6 +59,7 @@ COPY bin/convertto-png /usr/local/bin/convertto-png
 COPY bin/convertto-presentation /usr/local/bin/convertto-presentation
 COPY bin/presentations-utils /usr/local/bin/presentations-utils
 COPY bin/marp-theme-embed.js /usr/local/lib/marp-theme-embed.js
+COPY plugins/asciidoctor/ /plugins/asciidoctor/
 
 RUN chmod +x \
     /usr/local/bin/convertto-asciidoc \
