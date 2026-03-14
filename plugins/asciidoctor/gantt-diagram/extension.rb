@@ -179,7 +179,18 @@ module PresentationUtils
         bottom_padding = 12
 
         total_units = [total_units, 1].max
-        grid_width = total_units * cell_width
+        period_label = case period.to_s.downcase
+                       when "week" then "W"
+                       when "day" then "D"
+                       when "month" then "M"
+                       else period.to_s[0].to_s.upcase
+                       end
+        period_cell_padding = 6
+        max_period_label_length = period_label.length + total_units.to_s.length
+        min_cell_width = (max_period_label_length * (font_size * 0.7) + (period_cell_padding * 2)).to_i
+        cell_width = [cell_width, min_cell_width].max
+
+        grid_width = (total_units+1) * cell_width
         width = left_padding + label_col_width + grid_width + right_padding
 
         indent_width = 14
@@ -193,25 +204,18 @@ module PresentationUtils
         marker_height = [8, (bar_height * 0.9).to_i].max
         marker_tip = [3, (marker_height * 0.35).to_i].max
 
-        period_label = case period.to_s.downcase
-                       when "week" then "W"
-                       when "day" then "D"
-                       when "month" then "M"
-                       else period.to_s[0].to_s.upcase
-                       end
-
         svg_lines = []
         svg_lines << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"#{width}\" height=\"#{height}\" viewBox=\"0 0 #{width} #{height}\">"
         svg_lines << "  <rect x=\"0\" y=\"0\" width=\"#{width}\" height=\"#{height}\" fill=\"white\"/>"
         svg_lines << "  <rect x=\"#{left_padding}\" y=\"#{top_padding}\" width=\"#{label_col_width + grid_width}\" height=\"#{header_height}\" fill=\"#{header_bg}\"/>"
 
         header_y = top_padding + (header_height / 2) + (font_size / 2) - 2
-        svg_lines << "  <text x=\"#{left_padding + 4}\" y=\"#{header_y}\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" fill=\"#{text_color}\">Activity</text>"
+        svg_lines << "  <text x=\"#{left_padding + 4}\" y=\"#{header_y}\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" font-weight=\"700\" fill=\"#{text_color}\">Activity</text>"
 
         total_units.times do |idx|
           label = "#{period_label}#{idx + 1}"
-          x = left_padding + label_col_width + (idx * cell_width) + (cell_width / 2)
-          svg_lines << "  <text x=\"#{x}\" y=\"#{header_y}\" text-anchor=\"middle\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" fill=\"#{text_color}\">#{escape_xml(label)}</text>"
+          x = left_padding + label_col_width + (idx * cell_width) + (cell_width)
+          svg_lines << "  <text x=\"#{x}\" y=\"#{header_y}\" text-anchor=\"middle\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" font-weight=\"700\" fill=\"#{text_color}\">#{escape_xml(label)}</text>"
         end
 
         grid_top = top_padding + header_height
@@ -222,7 +226,7 @@ module PresentationUtils
         (1..total_units).each do |idx|
           next unless (idx % 5).zero?
 
-          x = left_padding + label_col_width + (idx * cell_width)
+          x = left_padding + label_col_width + (idx * cell_width) + cell_width/2
           svg_lines << "  <line x1=\"#{x}\" y1=\"#{top_padding}\" x2=\"#{x}\" y2=\"#{grid_bottom}\" stroke=\"#{grid_color}\"/>"
         end
 
@@ -253,12 +257,12 @@ module PresentationUtils
           bar_center_y = bar_y + (bar_height / 2.0)
 
           if activity[:is_milestone]
-            milestone_x = left_padding + label_col_width + (activity[:start] * cell_width)
+            milestone_x = left_padding + label_col_width + (activity[:start] * cell_width) + cell_width/2
             svg_lines << "  <polygon points=\"#{diamond_points(milestone_x, bar_center_y, marker_width)}\" fill=\"#{marker_color}\"/>"
             next
           end
 
-          start_x = left_padding + label_col_width + (activity[:start] * cell_width)
+          start_x = left_padding + label_col_width + (activity[:start] * cell_width) + cell_width/2
           end_x = start_x + (activity[:duration] * cell_width)
 
           svg_lines << "  <rect x=\"#{start_x}\" y=\"#{bar_y}\" width=\"#{end_x - start_x}\" height=\"#{bar_height}\" fill=\"#{bar_color}\"/>"
