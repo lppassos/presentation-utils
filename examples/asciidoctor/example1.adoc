@@ -1,23 +1,26 @@
-= Example Gantt Diagram
-:doctype: article
+:doctype: book
 :toc: left
 :imagesdir: .
+
+= Example Gantt Diagram
 
 == Project Plan
 
 This example shows how to include a Gantt chart in Asciidoctor using the `gantt` block.
 
+.Plano de execução do projecto
 [gantt, target=project-plan.svg]
 ----
 period: "week"
 activities:
-  1, "Planning"
-    2, "Discovery", duration=2
-    3, "Design", duration=3, dependencies=2
-  4, "Delivery"
-    5, "Implementation", duration=6, dependencies=3
-    6, "QA", duration=2, dependencies=5
-  7, "End of project", dependencies=6
+  1, "Gestão de Projecto", duration=13
+  2, "Planning"
+    2.1, "Discovery", duration=2
+    2.2, "Design", duration=3, dependencies=2.1
+  3, "Delivery"
+    3.1, "Implementation", duration=6, dependencies=2.2
+    3.2, "QA", duration=2, dependencies=3.1
+  4, "End of project", dependencies=3.2
 ----
 
 The chart above should render as an SVG and be embedded into the PDF output.
