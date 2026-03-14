@@ -6,6 +6,7 @@ This document describes the layout of the `presentation-utils` repository and th
 
 - `bin/`: CLI entrypoints and conversion helpers used inside the container image.
 - `docs/`: Documentation files for the project.
+- `plugins/`: Custom Asciidoctor extensions bundled in the container.
 - `themes/`: Default example themes to use in Asciidoctor and Marp
 - `Dockerfile`: Builds the Debian-based image with Asciidoctor, Marp, draw.io, and supporting tools.
 - `README.md`: Usage instructions, examples, and platform notes.
@@ -32,3 +33,7 @@ This document describes the layout of the `presentation-utils` repository and th
 ## docs/
 
 - `docs/PROJECT_STRUCTURE.md`: This file.
+
+## plugins/
+
+- `plugins/asciidoctor/`: Asciidoctor extensions loaded by conversion scripts.
