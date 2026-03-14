@@ -1,0 +1,74 @@
+name: default
+extends: default
+page:
+  size: A4
+  margin: [20mm, 20mm, 20mm, 20mm]
+  layout: portrait
+base:
+  font-family: Noto Serif
+  font-size: 11
+  line-height-length: 14
+  line-height: 1.4
+  text-align: left
+  font-color: #1b1b1b
+  background-color: #ffffff
+link:
+  font-color: #1b5fbf
+heading:
+  font-family: Noto Sans
+  font-color: #101010
+  line-height: 1.2
+  h1:
+    font-size: 22
+    margin-bottom: 10
+  h2:
+    font-size: 18
+    margin-bottom: 8
+  h3:
+    font-size: 15
+    margin-bottom: 6
+  h4:
+    font-size: 13
+    margin-bottom: 6
+  h5:
+    font-size: 12
+    margin-bottom: 4
+  h6:
+    font-size: 11
+    margin-bottom: 4
+code:
+  font-family: Noto Sans Mono
+  font-size: 10
+  background-color: #f6f7f8
+  border-color: #e2e6ea
+  border-radius: 3
+blockquote:
+  border-color: #d1d7de
+  border-width: 4
+  font-color: #334155
+  background-color: #f8fafc
+admonition:
+  icon:
+    tip:
+      name: fa-lightbulb
+      stroke-color: #2b7a2b
+    note:
+      name: fa-info-circle
+      stroke-color: #1b5fbf
+    important:
+      name: fa-exclamation-circle
+      stroke-color: #b45309
+    warning:
+      name: fa-triangle-exclamation
+      stroke-color: #c2410c
+    caution:
+      name: fa-skull-crossbones
+      stroke-color: #991b1b
+table:
+  head:
+    font-color: #0f172a
+    background-color: #f1f5f9
+  body:
+    stripe-background-color: #f8fafc
+footer:
+  border-color: #e2e6ea
