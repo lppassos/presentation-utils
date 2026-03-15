@@ -201,8 +201,6 @@ module PresentationUtils
 
         bar_height = (row_height * 0.55).to_i
         marker_width = [6, (bar_height * 0.8).to_i].max
-        marker_height = [8, (bar_height * 0.9).to_i].max
-        marker_tip = [3, (marker_height * 0.35).to_i].max
 
         svg_lines = []
         svg_lines << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"#{width}\" height=\"#{height}\" viewBox=\"0 0 #{width} #{height}\">"
@@ -258,16 +256,14 @@ module PresentationUtils
 
           if activity[:is_milestone]
             milestone_x = left_padding + label_col_width + (activity[:start] * cell_width) + cell_width/2
-            svg_lines << "  <polygon points=\"#{diamond_points(milestone_x, bar_center_y, marker_width)}\" fill=\"#{marker_color}\"/>"
+            milestone_marker(svg_lines,milestone_x, bar_y, bar_height, marker_color)
             next
           end
 
           start_x = left_padding + label_col_width + (activity[:start] * cell_width) + cell_width/2
           end_x = start_x + (activity[:duration] * cell_width)
 
-          svg_lines << "  <rect x=\"#{start_x}\" y=\"#{bar_y}\" width=\"#{end_x - start_x}\" height=\"#{bar_height}\" fill=\"#{bar_color}\"/>"
-          svg_lines << "  <polygon points=\"#{marker_points(start_x, bar_y, marker_width, marker_height, marker_tip)}\" fill=\"#{marker_color}\"/>"
-          svg_lines << "  <polygon points=\"#{marker_points(end_x, bar_y, marker_width, marker_height, marker_tip)}\" fill=\"#{marker_color}\"/>"
+          task_bar(svg_lines, start_x, bar_y, end_x-start_x, bar_height, bar_color, marker_color)
         end
 
         svg_lines << "</svg>"
@@ -280,26 +276,6 @@ module PresentationUtils
           .gsub("<", "&lt;")
           .gsub(">", "&gt;")
           .gsub("\"", "&quot;")
-      end
-
-      def marker_points(center_x, top_y, width, height, tip_height)
-        half = width / 2.0
-        tip_y = top_y + height
-        base_y = tip_y - tip_height
-        left_x = center_x - half
-        right_x = center_x + half
-
-        "#{left_x},#{top_y} #{right_x},#{top_y} #{right_x},#{base_y} #{center_x},#{tip_y} #{left_x},#{base_y}"
-      end
-
-      def diamond_points(center_x, center_y, width)
-        half = width / 2.0
-        left_x = center_x - half
-        right_x = center_x + half
-        top_y = center_y - half
-        bottom_y = center_y + half
-
-        "#{center_x},#{top_y} #{right_x},#{center_y} #{center_x},#{bottom_y} #{left_x},#{center_y}"
       end
 
       def apply_grouping(entries)
@@ -345,6 +321,45 @@ module PresentationUtils
 
         rows
       end
+
+      def task_bar(svg_lines, start_x, bar_y, width, bar_height, bar_color, marker_color)
+
+          marker_width = [6, (bar_height * 0.8).to_i].max
+          marker_height = [8, (bar_height * 0.9).to_i].max
+          marker_tip = [3, (marker_height * 0.35).to_i].max
+
+          svg_lines << "  <rect x=\"#{start_x}\" y=\"#{bar_y}\" width=\"#{width}\" height=\"#{bar_height}\" fill=\"#{bar_color}\"/>"
+          svg_lines << "  <polygon points=\"#{marker_points(start_x, bar_y, marker_width, marker_height, marker_tip)}\" fill=\"#{marker_color}\"/>"
+          svg_lines << "  <polygon points=\"#{marker_points(start_x + width, bar_y, marker_width, marker_height, marker_tip)}\" fill=\"#{marker_color}\"/>"
+      end
+
+      def milestone_marker(svg_lines, milestone_x, bar_y, bar_height, marker_color)
+          bar_center_y = bar_y + bar_height/2
+          marker_width = [6, (bar_height * 0.8).to_i].max
+
+          svg_lines << "  <polygon points=\"#{diamond_points(milestone_x, bar_center_y, marker_width)}\" fill=\"#{marker_color}\"/>"
+      end
+
+      def marker_points(center_x, top_y, width, height, tip_height)
+        half = width / 2.0
+        tip_y = top_y + height
+        base_y = tip_y - tip_height
+        left_x = center_x - half
+        right_x = center_x + half
+
+        "#{left_x},#{top_y} #{right_x},#{top_y} #{right_x},#{base_y} #{center_x},#{tip_y} #{left_x},#{base_y}"
+      end
+
+      def diamond_points(center_x, center_y, width)
+        half = width / 2.0
+        left_x = center_x - half
+        right_x = center_x + half
+        top_y = center_y - half
+        bottom_y = center_y + half
+
+        "#{center_x},#{top_y} #{right_x},#{center_y} #{center_x},#{bottom_y} #{left_x},#{center_y}"
+      end
+
     end
   end
 end
