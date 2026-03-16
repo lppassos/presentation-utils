@@ -5,7 +5,7 @@ require "securerandom"
 
 module PresentationUtils
   module GanttDiagram
-    class GanttBlock < Asciidoctor::Extensions::BlockProcessor
+    class GanttBlockProcessor < Asciidoctor::Extensions::BlockProcessor
       include Asciidoctor::Logging
 
       use_dsl
@@ -50,26 +50,14 @@ module PresentationUtils
         computed = compute_schedule(activities)
         total_units = computed.map { |activity| activity[:end] }.max || 0
 
-        target = attrs["target"]
-        target = "gantt-#{SecureRandom.hex(4)}.svg" if target.nil? || target.strip.empty?
-        target = normalize_target(target)
-
-        images_outdir = document.attr("imagesoutdir") || document.attr("imagesdir") || "."
-        docdir = document.attr("docdir") || Dir.pwd
-        images_outdir = File.expand_path(images_outdir, docdir) unless Pathname.new(images_outdir).absolute?
-
-        output_path = if Pathname.new(target).absolute?
-                        target
-                      else
-                        File.join(images_outdir, target)
-                      end
-
-        FileUtils.mkdir_p(File.dirname(output_path))
-
-        svg = render_svg(document, computed, total_units, period)
-        
-        File.write(output_path, svg)
-        create_image_block(parent, {"target" => output_path, "alt" => "Gantt diagram"})
+        create_block parent, :open, nil, attrs.merge({
+          'role' => 'gantt-diagram',
+          'gantt-data' => {
+            'activities' => computed,
+            'period' => period,
+            'total-units' => total_units,
+          }
+        })
       end
 
       def parse_activity(line)
@@ -147,6 +135,82 @@ module PresentationUtils
         activities.map { |activity| resolved[activity[:id]] }
       end
 
+      def escape_xml(text)
+        text.to_s
+          .gsub("&", "&amp;")
+          .gsub("<", "&lt;")
+          .gsub(">", "&gt;")
+          .gsub("\"", "&quot;")
+      end
+
+      def apply_grouping(entries)
+        grouped = []
+        base_indent_level = 0
+        entries.each_with_index do |entry, index|
+          activity = entry[:activity]
+          next unless activity
+
+          indent_level = entry[:indent].to_i
+          base_indent_level = indent_level if base_indent_level == 0
+          activity[:indent_level] = indent_level > base_indent_level ? 1 : 0
+          activity[:is_group] = false
+          activity[:is_milestone] = activity[:duration].nil?
+          grouped << activity
+
+          next_entry = entries[index + 1]
+          next unless next_entry && next_entry[:indent].to_i > indent_level
+          activity[:is_group] = true
+          activity[:is_milestone] = false
+        end
+        grouped
+      end
+    end
+
+    class GanttBlockConverter < (Asciidoctor::Converter.for 'pdf')
+      include Asciidoctor::Logging
+
+      register_for 'pdf'
+
+      def convert_open node
+        if node.role == 'gantt-diagram'
+          data = node.attr('gantt-data')
+          document = node.document
+
+          target = node.attr("target")
+          target = "gantt-#{SecureRandom.hex(4)}.svg" if target.nil? || target.strip.empty?
+          target = normalize_target(target)
+
+          images_outdir = document.attr("imagesoutdir") || document.attr("imagesdir") || "."
+          docdir = document.attr("docdir") || Dir.pwd
+          images_outdir = File.expand_path(images_outdir, docdir) unless Pathname.new(images_outdir).absolute?
+
+          output_path = if Pathname.new(target).absolute?
+                          target
+                        else
+                          File.join(images_outdir, target)
+                        end
+
+          FileUtils.mkdir_p(File.dirname(output_path))
+          svg = render_svg(document, data["activities"], data["total-units"], data["period"])
+          File.write(output_path, svg)
+
+          render_image = ::Asciidoctor::Block.new(
+            node.parent,
+            :image,
+            source: nil,
+            attributes: {
+              'target' => output_path,
+              'alt' => 'Gantt chart'
+            }
+          )
+
+          convert_image render_image
+
+        else
+          super
+        end
+      end
+
       def normalize_target(target)
         normalized = target.strip
         if normalized =~ /\.[^.]+\z/
@@ -158,16 +222,17 @@ module PresentationUtils
       end
 
       def render_svg(document, activities, total_units, period)
-        font_family = document.attr("gantt-font-family") || document.attr("base-font-family")
-        font_size = (document.attr("gantt-font-size") || 12).to_i
-        cell_width = (document.attr("gantt-cell-width") || 28).to_i
-        row_height = (document.attr("gantt-row-height") || 26).to_i
-        header_height = (document.attr("gantt-header-height") || 28).to_i
-        text_color = document.attr("gantt-text-color") || "#222222"
-        grid_color = document.attr("gantt-grid-color") || "#d8d8d8"
-        bar_color = document.attr("gantt-bar-color") || "#4b8bbf"
-        marker_color = document.attr("gantt-marker-color") || "#000000"
-        header_bg = document.attr("gantt-header-bg") || "#f5f5f5"
+        font_family = get_setting(document, "gantt-font-family", :gantt_font_family,  document.attr("base-font-family"))
+        font_size = get_setting(document, "gantt-font-size", :gantt_font_size, 12).to_i
+        cell_width = get_setting(document, "gantt-cell-width", :gantt_cell_width, 28).to_i
+        row_height = get_setting(document, "gantt-row-height", :gantt_row_height, 26).to_i
+        header_height = get_setting(document, "gantt-header-height", :gantt_header_height, 28).to_i
+        text_color = get_setting(document, "gantt-text-color", :gantt_text_color, "#222222")
+        grid_color = get_setting(document, "gantt-grid-color", :gantt_grid_color, "#d8d8d8")
+        bar_color = get_setting(document, "gantt-bar-color", :gantt_bar_color, "#4b8bbf")
+        marker_color = get_setting(document, "gantt-marker-color", :gantt_marker_color, "#000000")
+        header_fg = get_setting(document, "gantt-header-fg", :gantt_header_fg, "#ffffff")
+        header_bg = get_setting(document, "gantt-header-bg", :gantt_header_bg, "#f5f5f5")
 
         label_texts = activities.map { |activity| "#{activity[:id]}. #{activity[:label]}" }
         label_max = label_texts.map(&:length).max || 10
@@ -208,12 +273,12 @@ module PresentationUtils
         svg_lines << "  <rect x=\"#{left_padding}\" y=\"#{top_padding}\" width=\"#{label_col_width + grid_width}\" height=\"#{header_height}\" fill=\"#{header_bg}\"/>"
 
         header_y = top_padding + (header_height / 2) + (font_size / 2) - 2
-        svg_lines << "  <text x=\"#{left_padding + 4}\" y=\"#{header_y}\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" font-weight=\"700\" fill=\"#{text_color}\">Activity</text>"
+        svg_lines << "  <text x=\"#{left_padding + 4}\" y=\"#{header_y}\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" font-weight=\"700\" fill=\"#{header_fg}\">Activity</text>"
 
         total_units.times do |idx|
           label = "#{period_label}#{idx + 1}"
           x = left_padding + label_col_width + (idx * cell_width) + (cell_width)
-          svg_lines << "  <text x=\"#{x}\" y=\"#{header_y}\" text-anchor=\"middle\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" font-weight=\"700\" fill=\"#{text_color}\">#{escape_xml(label)}</text>"
+          svg_lines << "  <text x=\"#{x}\" y=\"#{header_y}\" text-anchor=\"middle\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" font-weight=\"700\" fill=\"#{header_fg}\">#{escape_xml(label)}</text>"
         end
 
         grid_top = top_padding + header_height
@@ -270,34 +335,20 @@ module PresentationUtils
         svg_lines.join("\n")
       end
 
-      def escape_xml(text)
-        text.to_s
-          .gsub("&", "&amp;")
-          .gsub("<", "&lt;")
-          .gsub(">", "&gt;")
-          .gsub("\"", "&quot;")
-      end
-
-      def apply_grouping(entries)
-        grouped = []
-        base_indent_level = 0
-        entries.each_with_index do |entry, index|
-          activity = entry[:activity]
-          next unless activity
-
-          indent_level = entry[:indent].to_i
-          base_indent_level = indent_level if base_indent_level == 0
-          activity[:indent_level] = indent_level > base_indent_level ? 1 : 0
-          activity[:is_group] = false
-          activity[:is_milestone] = activity[:duration].nil?
-          grouped << activity
-
-          next_entry = entries[index + 1]
-          next unless next_entry && next_entry[:indent].to_i > indent_level
-          activity[:is_group] = true
-          activity[:is_milestone] = false
+      def get_setting(document, attr_name, theme_name, default)
+        logger.warn("Call: #{attr_name} #{theme_name} #{default}")
+        if document.attr(attr_name)
+          return document.attr(attr_name)
         end
-        grouped
+
+        if theme[theme_name]
+          if default[0] == '#'
+            return '#' + theme[theme_name]
+          else
+            return theme[theme_name]
+          end
+        end
+        default
       end
 
       def build_rows(activities, row_height, separator_height)
@@ -359,11 +410,10 @@ module PresentationUtils
 
         "#{center_x},#{top_y} #{right_x},#{center_y} #{center_x},#{bottom_y} #{left_x},#{center_y}"
       end
-
     end
   end
 end
 
 Asciidoctor::Extensions.register do
-  block PresentationUtils::GanttDiagram::GanttBlock
+  block PresentationUtils::GanttDiagram::GanttBlockProcessor
 end
