@@ -12,6 +12,9 @@ module PresentationUtils
 
       def convert_document doc
         @last_page_marker_doc = doc
+        if marker_enabled? && marker_position == 'inline'
+          append_inline_marker doc
+        end
         super
       end
 
@@ -124,6 +127,39 @@ module PresentationUtils
         ensure
           go_to_page prev if prev && page_number != prev
         end
+      end
+
+      def append_inline_marker doc
+        image_target, image_attrs = parse_theme_image_value
+        return unless image_target
+
+        image_path, _image_format = resolve_marker_image_path doc, image_target
+        unless image_path && ::File.readable?(image_path)
+          log :warn, %(last page marker image not found or not readable: #{image_path})
+          return
+        end
+
+        attrs = {
+          'target' => image_path,
+          'align' => marker_alignment,
+        }
+
+        if (w = image_attrs['width'])
+          attrs['width'] = w
+        end
+        if (h = image_attrs['height'])
+          attrs['height'] = h
+        end
+        if (fit = image_attrs['fit'])
+          attrs['fit'] = fit
+        end
+        if (alt = image_attrs['alt'])
+          attrs['alt'] = alt
+        end
+
+        img_block = ::Asciidoctor::Block.new doc, :image, content_model: :empty, attributes: attrs
+        doc.blocks << img_block
+        nil
       end
     end
   end
