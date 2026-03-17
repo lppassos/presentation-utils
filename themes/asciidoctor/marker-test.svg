@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="120" viewBox="0 0 600 120">
+  <rect x="1" y="1" width="598" height="118" fill="none" stroke="#1e1e1e" stroke-width="2" />
+  <g fill="#1e1e1e">
+    <!-- E -->
+    <rect x="40" y="25" width="16" height="70" />
+    <rect x="56" y="25" width="55" height="14" />
+    <rect x="56" y="53" width="44" height="14" />
+    <rect x="56" y="81" width="55" height="14" />
+    <!-- N -->
+    <rect x="140" y="25" width="16" height="70" />
+    <rect x="196" y="25" width="16" height="70" />
+    <polygon points="156,25 172,25 196,95 180,95" />
+    <!-- D -->
+    <rect x="245" y="25" width="16" height="70" />
+    <rect x="261" y="25" width="52" height="14" />
+    <rect x="261" y="81" width="52" height="14" />
+    <rect x="313" y="39" width="16" height="42" />
+    <!-- dotted line -->
+    <g opacity="0.75">
+      <rect x="360" y="58" width="6" height="4" />
+      <rect x="376" y="58" width="6" height="4" />
+      <rect x="392" y="58" width="6" height="4" />
+      <rect x="408" y="58" width="6" height="4" />
+      <rect x="424" y="58" width="6" height="4" />
+      <rect x="440" y="58" width="6" height="4" />
+      <rect x="456" y="58" width="6" height="4" />
+      <rect x="472" y="58" width="6" height="4" />
+      <rect x="488" y="58" width="6" height="4" />
+      <rect x="504" y="58" width="6" height="4" />
+      <rect x="520" y="58" width="6" height="4" />
+      <rect x="536" y="58" width="6" height="4" />
+      <rect x="552" y="58" width="6" height="4" />
+    </g>
+  </g>
+</svg>
