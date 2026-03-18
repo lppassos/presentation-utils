@@ -145,7 +145,7 @@ module PresentationUtils
         repeat (content_start_page_number..num_pages), dynamic: true do
           pgnum = page_number
 
-          next if marker_enabled? && marker_position == 'bottom' && pgnum == num_pages
+          next if periphery == 'footer' && marker_enabled? && marker_position == 'bottom' && pgnum == num_pages
 
           # NOTE: don't write on pages which are imported / inserts (otherwise we can get a corrupt PDF)
           next if page.imported_page? || (disable_on_pages.include? pgnum)
