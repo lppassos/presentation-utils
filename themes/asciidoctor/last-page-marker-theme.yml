@@ -1,0 +1,10 @@
+name: last-page-marker
+extends: default
+
+page:
+  margin: [20mm, 20mm, 30mm, 20mm]
+
+last-page-marker:
+  image: "image:marker-test.svg[fit=contain]"
+  position: bottom
+  alignment: center

@@ -1,0 +1,20 @@
+= Last Page Marker Example
+:doctype: article
+
+This document exists to test the last page marker plugin.
+
+== Page 1
+
+Some content.
+
+<<<
+
+== Page 2
+
+Some more content.
+
+<<<
+
+== Page 3
+
+This should be the last content page.
