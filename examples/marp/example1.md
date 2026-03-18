@@ -20,7 +20,8 @@ activities:
     3, "Requirements", duration=2, dependencies=2
   4, "Delivery"
     5, "Development", duration=6, dependencies=3
-    6, "Tests", duration=2, dependencies=5
+    6, "Tests"
+      6.1, "My real test", duration=2, dependencies=5
   7, "Launch", dependencies=6
   8, "Support", duration=12
 ```

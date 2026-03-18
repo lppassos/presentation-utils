@@ -69,6 +69,8 @@ function parseActivity(line) {
 
 function applyGrouping(entries) {
   const grouped = [];
+  let current_group_level = 0;
+  let indent_levels = [];
   let baseIndent = 0;
 
   entries.forEach((entry, index) => {
@@ -78,7 +80,17 @@ function applyGrouping(entries) {
     const indentLevel = Number(entry.indent || 0);
     if (baseIndent === 0) baseIndent = indentLevel;
 
-    activity.indentLevel = indentLevel > baseIndent ? 1 : 0;
+    if (indentLevel > baseIndent) {
+      current_group_level = current_group_level + 1;
+      indent_levels.push(baseIndent);
+      baseIndent = indentLevel;
+    } else {
+      while (indentLevel < baseIndent && current_group_level > 0) {
+        current_group_level = current_group_level - 1;
+        baseIndent = indent_levels.pop();
+      }
+    }
+    activity.indentLevel = current_group_level;
     activity.isGroup = false;
     activity.isMilestone =
       activity.duration === null || activity.duration === undefined;
