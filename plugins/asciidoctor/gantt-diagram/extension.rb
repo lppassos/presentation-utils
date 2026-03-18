@@ -145,14 +145,26 @@ module PresentationUtils
 
       def apply_grouping(entries)
         grouped = []
+        current_group_level = 0
         base_indent_level = 0
+        indent_levels = []
         entries.each_with_index do |entry, index|
           activity = entry[:activity]
           next unless activity
 
           indent_level = entry[:indent].to_i
           base_indent_level = indent_level if base_indent_level == 0
-          activity[:indent_level] = indent_level > base_indent_level ? 1 : 0
+          if indent_level > base_indent_level
+            current_group_level = current_group_level + 1
+            indent_levels << base_indent_level
+            base_indent_level = indent_level
+          else
+            while indent_level < base_indent_level && current_group_level>0
+              current_group_level = current_group_level - 1
+              base_indent_level = indent_levels.pop
+            end
+          end
+          activity[:indent_level] = current_group_level
           activity[:is_group] = false
           activity[:is_milestone] = activity[:duration].nil?
           grouped << activity
@@ -336,7 +348,6 @@ module PresentationUtils
       end
 
       def get_setting(document, attr_name, theme_name, default)
-        logger.warn("Call: #{attr_name} #{theme_name} #{default}")
         if document.attr(attr_name)
           return document.attr(attr_name)
         end
