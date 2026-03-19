@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source /usr/local/lib/path-utils.sh
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -72,6 +74,8 @@ if [[ -z "$path" ]]; then
   exit 2
 fi
 
+path="$(pu_hostpath_to_work "$path")"
+
 if [[ ! -f "$path" ]]; then
   echo "ERROR: File not found: $path" >&2
   exit 2
@@ -106,13 +110,20 @@ elif [[ "$output" != /* ]]; then
   output="$input_dir/$output"
 fi
 
+output="$(pu_hostpath_to_work "$output")"
+
 if [[ -z "$theme" ]]; then
   echo "ERROR: Theme not provided and default theme not configured. Create $MARP_THEMES_DIR/default-theme or pass --theme <name|path>." >&2
   exit 2
 fi
 
-theme_path="$theme"
-if [[ ! -f "$theme_path" ]]; then
+if [[ "$theme" == *'/'* || "$theme" == *'\\'* || "$theme" == *:* || "$theme" == .* ]]; then
+  echo "ERROR: --theme must be a name/filename only (no paths). Example: --theme acme or --theme acme.css" >&2
+  exit 2
+fi
+
+theme_path="$MARP_THEMES_DIR/$theme"
+if [[ "$theme" != *.css ]]; then
   theme_path="$MARP_THEMES_DIR/${theme}.css"
 fi
 
