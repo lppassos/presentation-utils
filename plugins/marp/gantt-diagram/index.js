@@ -1,13 +1,10 @@
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
-const crypto = require("crypto");
-
 function parseGanttBlock(content) {
   const lines = content.split(/\r?\n/);
   let period = "week";
   let inActivities = false;
+  let groupBars = "all";
   const rawEntries = [];
 
   for (const line of lines) {
@@ -17,6 +14,12 @@ function parseGanttBlock(content) {
     if (stripped.startsWith("period:")) {
       const value = stripped.split(":", 2)[1] || "";
       period = value.trim().replace(/^"|"$/g, "");
+      continue;
+    }
+
+    if (stripped.startsWith("group-bars:")) {
+      const value = stripped.split(":", 2)[1] || "";
+      groupBars = value;
       continue;
     }
 
@@ -42,7 +45,7 @@ function parseGanttBlock(content) {
     ...computed.map((activity) => activity.end || 0),
   );
 
-  return { period, activities: computed, totalUnits };
+  return { period, activities: computed, totalUnits, groupBars };
 }
 
 function parseActivity(line) {
@@ -148,20 +151,54 @@ function computeSchedule(activities) {
     resolved[activity.id] = activity;
   }
 
-  return activities.map((activity) => resolved[activity.id] || activity);
+  let ordered = activities.map((activity) => resolved[activity.id] || activity);
+
+  ordered.forEach((activity, index) => {
+    if (!activity.isGroup) {
+      return;
+    }
+
+    let groupLevel = activity.indentLevel;
+    let descendants = [];
+    for (
+      let j = index + 1;
+      j < ordered.length && ordered[j].indentLevel > groupLevel;
+      j++
+    ) {
+      if (!ordered[j].isGroup) {
+        descendants.push(ordered[j]);
+      }
+    }
+
+    console.error(JSON.stringify([activity, descendants]));
+    if (descendants.length >= 1) {
+      let groupStart = 999999;
+      let groupEnd = 0;
+      descendants.forEach((a) => {
+        if (groupStart > a.start) groupStart = a.start;
+        if (groupEnd < a.end) groupEnd = a.end;
+      });
+      activity.start = groupStart;
+      activity.end = groupEnd;
+      activity.duration = groupEnd - groupStart;
+      activity.hasGroupBar = descendants.length > 1;
+    } else {
+      activity.start = 0;
+      activity.end = 0;
+      activity.duration = 0;
+      activity.hasGroupBar = false;
+    }
+  });
+
+  return ordered;
 }
 
-function renderSvg(activities, totalUnits, period, options) {
-  const fontFamily = options.fontFamily || "DejaVu Sans";
+function renderSvg(activities, totalUnits, period, groupBars, options) {
   const fontSize = options.fontSize || 12;
   let cellWidth = options.cellWidth || 28;
   const rowHeight = options.rowHeight || 26;
   const headerHeight = options.headerHeight || 28;
-  const textColor = options.textColor || "#222222";
   const gridColor = options.gridColor || "#d8d8d8";
-  const barColor = options.barColor || "#4b8bbf";
-  const markerColor = options.markerColor || "#000000";
-  const headerBg = options.headerBg || "#f5f5f5";
 
   const labelTexts = activities.map(
     (activity) => `${activity.id}. ${activity.label}`,
@@ -249,7 +286,7 @@ function renderSvg(activities, totalUnits, period, options) {
   }
 
   let currentY = gridTop;
-  rows.forEach((row, index) => {
+  rows.forEach((row, _index) => {
     const rowY = currentY;
     currentY += row.height;
 
@@ -270,9 +307,24 @@ function renderSvg(activities, totalUnits, period, options) {
       `  <text x="${labelX}" y="${textY}" font-size="${fontSize}" font-weight="${fontWeight}" class="activity-label">${escapeXml(label)}</text>`,
     );
 
-    if (activity.isGroup) return;
-
     const barY = rowY + Math.floor((row.height - barHeight) / 2);
+    const startX =
+      leftPadding +
+      labelColWidth +
+      activity.start * cellWidth +
+      Math.floor(cellWidth / 2);
+
+    if (activity.isGroup) {
+      if (
+        (activity.hasGroupBar && groupBars !== "none") ||
+        groupBars === "all"
+      ) {
+        const groupBarHeight = Math.max(2, Math.floor(barHeight / 2));
+        const width = activity.duration * cellWidth;
+        groupBar(svgLines, startX, barY, width, groupBarHeight);
+      }
+      return;
+    }
 
     if (activity.isMilestone) {
       const milestoneX =
@@ -280,15 +332,10 @@ function renderSvg(activities, totalUnits, period, options) {
         labelColWidth +
         activity.start * cellWidth +
         Math.floor(cellWidth / 2);
-      milestoneMarker(svgLines, milestoneX, barY, barHeight, markerColor);
+      milestoneMarker(svgLines, milestoneX, barY, barHeight);
       return;
     }
 
-    const startX =
-      leftPadding +
-      labelColWidth +
-      activity.start * cellWidth +
-      Math.floor(cellWidth / 2);
     const widthValue = activity.duration * cellWidth;
     taskBar(svgLines, startX, barY, widthValue, barHeight);
   });
@@ -327,6 +374,22 @@ function buildRows(activities, rowHeight, separatorHeight) {
   return rows;
 }
 
+function groupBar(svgLines, startX, barY, width, barHeight) {
+  const markerWidth = Math.max(6, Math.floor(barHeight * 0.8));
+  const markerHeight = Math.max(8, Math.floor(barHeight * 1.5));
+  const markerTip = Math.max(3, Math.floor(markerHeight * 0.35));
+
+  svgLines.push(
+    `  <rect x="${startX}" y="${barY}" width="${width}" height="${barHeight}" class="group-bar"/>`,
+  );
+  svgLines.push(
+    `  <polygon points="${markerPoints(startX, barY, markerWidth, markerHeight, markerTip)}" class="marker"/>`,
+  );
+  svgLines.push(
+    `  <polygon points="${markerPoints(startX + width, barY, markerWidth, markerHeight, markerTip)}" class="marker"/>`,
+  );
+}
+
 function taskBar(svgLines, startX, barY, width, barHeight) {
   const markerWidth = Math.max(6, Math.floor(barHeight * 0.8));
   const markerHeight = Math.max(8, Math.floor(barHeight * 0.9));
@@ -343,7 +406,7 @@ function taskBar(svgLines, startX, barY, width, barHeight) {
   );
 }
 
-function milestoneMarker(svgLines, milestoneX, barY, barHeight, markerColor) {
+function milestoneMarker(svgLines, milestoneX, barY, barHeight) {
   const barCenterY = barY + barHeight / 2;
   const markerWidth = Math.max(6, Math.floor(barHeight * 0.8));
   svgLines.push(
@@ -369,59 +432,24 @@ function diamondPoints(centerX, centerY, width) {
   return `${centerX},${topY} ${rightX},${centerY} ${centerX},${bottomY} ${leftX},${centerY}`;
 }
 
-function resolveBaseDir(env) {
-  const candidates = [
-    env && env.filepath,
-    env && env.path,
-    env && env.filename,
-    env && env.file,
-  ].filter(Boolean);
-
-  if (candidates.length > 0) {
-    return path.dirname(String(candidates[0]));
-  }
-
-  return process.cwd();
-}
-
-function ensureRelative(fromDir, targetPath) {
-  let relativePath = path.relative(fromDir, targetPath);
-  if (!relativePath.startsWith(".")) {
-    relativePath = `.${path.sep}${relativePath}`;
-  }
-  return relativePath.split(path.sep).join("/");
-}
-
-function generateSvg(content, env, opts) {
-  const { period, activities, totalUnits } = parseGanttBlock(content);
-  const svg = renderSvg(activities, totalUnits, period, opts || {});
+function generateSvg(content, _env, opts) {
+  const { period, activities, totalUnits, groupBars } =
+    parseGanttBlock(content);
+  const svg = renderSvg(activities, totalUnits, period, groupBars, opts || {});
   return svg;
-}
-
-function generateSvgFile(content, env, opts) {
-  const svg = generateSvg(content, env, opts);
-  const baseDir = resolveBaseDir(env);
-
-  const fileName = `gantt-${crypto.randomBytes(4).toString("hex")}.svg`;
-  const outputPath = path.join(baseDir, ".imggen", fileName);
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, svg, "utf8");
-
-  return ensureRelative(baseDir, outputPath);
 }
 
 function ganttMarkdownItPlugin(md, pluginOptions) {
   const defaultFence =
     md.renderer.rules.fence ||
-    ((tokens, idx, options, env, slf) => slf.renderToken(tokens, idx, options));
+    ((tokens, idx, options, _env, slf) =>
+      slf.renderToken(tokens, idx, options));
 
   md.renderer.rules.fence = (tokens, idx, options, env, slf) => {
     const token = tokens[idx];
     const info = (token.info || "").trim();
     if (info === "gantt") {
-      //const imagePath = generateSvgFile(
       return generateSvg(token.content || "", env || {}, pluginOptions || {});
-      //return `<img src="${imagePath}" class="drop-shadow center"/>`;
     }
     return defaultFence(tokens, idx, options, env, slf);
   };

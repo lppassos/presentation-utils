@@ -43,6 +43,8 @@ Activity           | W1 | W2 | W3 | W4 | .. | .. | W10 | W11 | W12 | W13 | .. | 
 
 Indented activities are treated as part of the group defined by the previous non-indented row. Group rows do not require a duration. Tasks without a duration and no subtasks are milestones and render as a diamond.
 
+When a group contains more than one descendant task (including milestones), the group row renders a thinner summary bar spanning from the earliest descendant start to the latest descendant end. The summary bar fill and its end markers use `gantt-marker-color`.
+
 The tasks will be aligned according to the dependencies.
 
 The colors and fonts to use will be picked up from the theme.

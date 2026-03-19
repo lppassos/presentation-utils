@@ -46,6 +46,8 @@ The Gantt diagram extension reads the following attributes (with defaults):
 - `gantt-marker-color` (default `#000000`)
 - `gantt-header-bg` (default `#f5f5f5`)
 
+Group rows with more than one descendant task render a thinner summary bar spanning the earliest descendant start to the latest descendant end. The summary bar fill and end markers use `gantt-marker-color`.
+
 You can set these in your AsciiDoc header:
 
 ```adoc

@@ -18,6 +18,7 @@ module PresentationUtils
         lines = reader.lines
 
         period = "week"
+        group_bars = "all";
         activities = []
 
         in_activities = false
@@ -30,6 +31,12 @@ module PresentationUtils
           if stripped.start_with?("period:")
             value = stripped.split(":", 2)[1].to_s.strip
             period = value.gsub(/\A"|"\z/, "")
+            next
+          end
+
+          if stripped.start_with?("group-bars:")
+            value = stripped.split(":", 2)[1].to_s.strip
+            group_bars = value
             next
           end
 
@@ -55,6 +62,7 @@ module PresentationUtils
           'gantt-data' => {
             'activities' => computed,
             'period' => period,
+            'group-bars' => group_bars,
             'total-units' => total_units,
           }
         })
@@ -122,6 +130,8 @@ module PresentationUtils
           if activity[:is_group]
             activity[:start] = 0
             activity[:end] = 0
+            activity[:duration] = 0
+            activity[:has_group_bar] = false
           elsif activity[:is_milestone]
             activity[:start] = 0
             activity[:end] = 0
@@ -132,7 +142,39 @@ module PresentationUtils
           resolved[activity[:id]] = activity
         end
 
-        activities.map { |activity| resolved[activity[:id]] }
+        ordered = activities.map { |activity| resolved[activity[:id]] }
+
+        ordered.each_with_index do |activity, idx|
+          next unless activity[:is_group]
+
+          group_level = activity[:indent_level].to_i
+          descendants = []
+
+          j = idx + 1
+          while j < ordered.length && ordered[j][:indent_level].to_i > group_level
+            descendants << ordered[j]
+            j += 1
+          end
+
+          tasks = descendants.reject { |entry| entry[:is_group] }
+
+          if tasks.size >= 1
+            group_start = tasks.map { |t| t[:start].to_i }.min
+            group_end = tasks.map { |t| t[:end].to_i }.max
+
+            activity[:start] = group_start
+            activity[:end] = group_end
+            activity[:duration] = group_end - group_start
+            activity[:has_group_bar] = tasks.size > 1
+          else
+            activity[:start] = 0
+            activity[:end] = 0
+            activity[:duration] = 0
+            activity[:has_group_bar] = false
+          end
+        end
+
+        ordered
       end
 
       def escape_xml(text)
@@ -203,7 +245,7 @@ module PresentationUtils
                         end
 
           FileUtils.mkdir_p(File.dirname(output_path))
-          svg = render_svg(document, data["activities"], data["total-units"], data["period"])
+          svg = render_svg(document, data["activities"], data["total-units"], data["period"], data["group-bars"])
           File.write(output_path, svg)
 
           render_image = ::Asciidoctor::Block.new(
@@ -233,7 +275,7 @@ module PresentationUtils
         normalized
       end
 
-      def render_svg(document, activities, total_units, period)
+      def render_svg(document, activities, total_units, period, group_bars)
         font_family = get_setting(document, "gantt-font-family", :gantt_font_family,  document.attr("base-font-family"))
         font_size = get_setting(document, "gantt-font-size", :gantt_font_size, 12).to_i
         cell_width = get_setting(document, "gantt-cell-width", :gantt_cell_width, 28).to_i
@@ -325,11 +367,20 @@ module PresentationUtils
           svg_lines << "  <text x=\"#{label_x}\" y=\"#{text_y}\" font-family=\"#{font_family}\" font-size=\"#{font_size}\" font-weight=\"#{font_weight}\" fill=\"#{text_color}\">#{escape_xml(label)}</text>"
 
           next_row = rows[index + 1]
-
-          next if activity[:is_group]
-
           bar_y = row_y + ((row_height - bar_height) / 2)
-          bar_center_y = bar_y + (bar_height / 2.0)
+          start_x = left_padding + label_col_width + (activity[:start] * cell_width) + cell_width/2
+
+          if activity[:is_group]
+            if (activity[:has_group_bar] && group_bars != "none") || group_bars =="all"
+              group_bar_height = [2, (bar_height * 0.5).to_i].max
+
+              width = (activity[:duration] * cell_width)
+
+              group_bar(svg_lines, start_x, bar_y, width, group_bar_height, marker_color, marker_color)
+            end
+            next
+          end
+
 
           if activity[:is_milestone]
             milestone_x = left_padding + label_col_width + (activity[:start] * cell_width) + cell_width/2
@@ -337,7 +388,6 @@ module PresentationUtils
             next
           end
 
-          start_x = left_padding + label_col_width + (activity[:start] * cell_width) + cell_width/2
           end_x = start_x + (activity[:duration] * cell_width)
 
           task_bar(svg_lines, start_x, bar_y, end_x-start_x, bar_height, bar_color, marker_color)
@@ -382,6 +432,16 @@ module PresentationUtils
         end
 
         rows
+      end
+
+      def group_bar(svg_lines, start_x, bar_y, width, bar_height, bar_color, marker_color)
+          marker_width = [6, (bar_height * 0.8).to_i].max
+          marker_height = (bar_height * 1.5).to_i
+          marker_tip = [3, (marker_height * 0.35).to_i].max
+
+          svg_lines << "  <rect x=\"#{start_x}\" y=\"#{bar_y}\" width=\"#{width}\" height=\"#{bar_height}\" fill=\"#{bar_color}\"/>"
+          svg_lines << "  <polygon points=\"#{marker_points(start_x, bar_y, marker_width, marker_height, marker_tip)}\" fill=\"#{marker_color}\"/>"
+          svg_lines << "  <polygon points=\"#{marker_points(start_x + width, bar_y, marker_width, marker_height, marker_tip)}\" fill=\"#{marker_color}\"/>"
       end
 
       def task_bar(svg_lines, start_x, bar_y, width, bar_height, bar_color, marker_color)
