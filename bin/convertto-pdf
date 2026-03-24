@@ -97,11 +97,11 @@ asciidoctor_args=(
   -r /plugins/asciidoctor/last-page-marker/extension.rb
   -b pdf
   -o "${base}.pdf"
-  -v
   "$path"
   -a imagesoutdir=.imggen
   -a "pdf-themesdir=${PDF_THEMES_DIR}"
   -a "pdf-fontsdir=${PDF_THEMES_DIR}/fonts"
+  -a "mermaid-puppeteer-config=/usr/local/lib/puppeteer-config.json"
   -a compress
 )
 
