@@ -155,13 +155,41 @@ function applyGrouping(entries) {
   return grouped;
 }
 
-function computeSchedule(activities, _groupDescendants) {
+function computeSchedule(activities, groupDescendants) {
   const resolved = {};
   const pending = activities.map((activity) => ({ ...activity }));
   const maxPasses = pending.length * 2;
 
   for (let pass = 0; pass < maxPasses; pass += 1) {
     let progressed = false;
+
+    // Resolve group summary ranges once all leaf descendants are resolved.
+    for (let i = pending.length - 1; i >= 0; i -= 1) {
+      const activity = pending[i];
+      if (!activity.isGroup) continue;
+
+      const leafIds = (groupDescendants && groupDescendants[activity.id]) || [];
+      if (leafIds.length === 0) {
+        activity.start = 0;
+        activity.end = 0;
+        activity.duration = 0;
+        resolved[activity.id] = activity;
+        pending.splice(i, 1);
+        progressed = true;
+        continue;
+      }
+
+      if (!leafIds.every((id) => resolved[id])) continue;
+
+      const starts = leafIds.map((id) => resolved[id].start);
+      const ends = leafIds.map((id) => resolved[id].end);
+      activity.start = Math.min(...starts);
+      activity.end = Math.max(...ends);
+      activity.duration = Math.max(0, activity.end - activity.start);
+      resolved[activity.id] = activity;
+      pending.splice(i, 1);
+      progressed = true;
+    }
 
     for (let i = pending.length - 1; i >= 0; i -= 1) {
       const activity = pending[i];
@@ -240,40 +268,11 @@ function computeSchedule(activities, _groupDescendants) {
 
   let ordered = activities.map((activity) => resolved[activity.id] || activity);
 
-  ordered.forEach((activity, index) => {
-    if (!activity.isGroup) {
-      return;
-    }
-
-    let groupLevel = activity.indentLevel;
-    let descendants = [];
-    for (
-      let j = index + 1;
-      j < ordered.length && ordered[j].indentLevel > groupLevel;
-      j++
-    ) {
-      if (!ordered[j].isGroup) {
-        descendants.push(ordered[j]);
-      }
-    }
-
-    if (descendants.length >= 1) {
-      let groupStart = 999999;
-      let groupEnd = 0;
-      descendants.forEach((a) => {
-        if (groupStart > a.start) groupStart = a.start;
-        if (groupEnd < a.end) groupEnd = a.end;
-      });
-      activity.start = groupStart;
-      activity.end = groupEnd;
-      activity.duration = groupEnd - groupStart;
-      activity.hasGroupBar = descendants.length > 1;
-    } else {
-      activity.start = 0;
-      activity.end = 0;
-      activity.duration = 0;
-      activity.hasGroupBar = false;
-    }
+  // Render-only flags: compute whether a group has >1 leaf descendant.
+  ordered.forEach((activity) => {
+    if (!activity.isGroup) return;
+    const leafIds = (groupDescendants && groupDescendants[activity.id]) || [];
+    activity.hasGroupBar = leafIds.length > 1;
   });
 
   return ordered;
