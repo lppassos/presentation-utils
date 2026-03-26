@@ -53,11 +53,35 @@ function parseGanttBlock(content) {
   }
 
   const activities = applyGrouping(rawEntries);
-  const computed = computeSchedule(activities);
+  const groupDescendants = buildGroupDescendants(activities);
+  const computed = computeSchedule(activities, groupDescendants);
   const totalUnits = Math.max(0, ...computed.map((activity) => activity.end || 0));
   const columns = Math.max(1, Math.ceil(totalUnits));
 
   return { period, activities: computed, totalUnits, columns, groupBars };
+}
+
+function buildGroupDescendants(activities) {
+  const groupDescendants = {};
+
+  activities.forEach((activity, index) => {
+    if (!activity.isGroup) return;
+
+    const groupLevel = activity.indentLevel;
+    const leafDescendants = [];
+
+    for (
+      let j = index + 1;
+      j < activities.length && activities[j].indentLevel > groupLevel;
+      j += 1
+    ) {
+      if (!activities[j].isGroup) leafDescendants.push(activities[j].id);
+    }
+
+    groupDescendants[activity.id] = leafDescendants;
+  });
+
+  return groupDescendants;
 }
 
 function parseActivity(line) {
@@ -131,7 +155,7 @@ function applyGrouping(entries) {
   return grouped;
 }
 
-function computeSchedule(activities) {
+function computeSchedule(activities, _groupDescendants) {
   const resolved = {};
   const pending = activities.map((activity) => ({ ...activity }));
   const maxPasses = pending.length * 2;
