@@ -133,17 +133,47 @@ module PresentationUtils
           pending.delete_if do |activity|
             next false if activity[:is_group]
 
-            deps = activity[:dependencies]
-            deps_ends = deps.map { |dep| resolved[dep] && resolved[dep][:end] }.compact
+            deps = (activity[:dependency_tokens] || []).compact
+            referenced = deps.map { |dep| dep[:id] }.compact
+            resolved_referenced = referenced.select { |id| resolved[id] }
+            next false unless resolved_referenced.size == referenced.size
 
-            next false unless deps_ends.size == deps.size
-
-            deps_start_at = deps_ends.max || 0
             not_before_start_at = activity[:not_before_slot] ? (activity[:not_before_slot].to_f - 1.0) : 0.0
-            start_at = [deps_start_at, not_before_start_at].max
-            activity[:start] = start_at
-            duration = activity[:is_milestone] ? 0.0 : (activity[:duration] || 0.0)
-            activity[:end] = start_at + duration
+
+            fs_ends = deps
+              .select { |dep| dep[:type] == "FS" }
+              .map { |dep| resolved[dep[:id]][:end].to_f }
+            ss_starts = deps
+              .select { |dep| dep[:type] == "SS" }
+              .map { |dep| resolved[dep[:id]][:start].to_f }
+            ff_ends = deps
+              .select { |dep| dep[:type] == "FF" }
+              .map { |dep| resolved[dep[:id]][:end].to_f }
+
+            start_min = [
+              not_before_start_at.to_f,
+              (fs_ends.max || 0.0),
+              (ss_starts.max || 0.0),
+            ].max
+            end_min = ff_ends.max || 0.0
+
+            has_ss = !ss_starts.empty?
+            has_ff = !ff_ends.empty?
+
+            d = activity[:is_milestone] ? 0.0 : (activity[:duration] || 0.0).to_f
+
+            if has_ss && has_ff
+              activity[:start] = start_min
+              activity[:end] = [end_min, activity[:start]].max
+              activity[:duration] = [0.0, activity[:end] - activity[:start]].max
+            elsif has_ff
+              activity[:start] = [start_min, end_min - d].max
+              activity[:end] = activity[:start] + d
+            else
+              activity[:start] = start_min
+              activity[:end] = activity[:start] + d
+            end
+
             resolved[activity[:id]] = activity
             progressed = true
             true
