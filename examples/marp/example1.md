@@ -25,7 +25,7 @@ activities:
       6.1, "My real test", duration=2, dependencies=5
   7, "Launch", dependencies=6
   8, "Support", duration=12
-  9, "Training", duration=2, dependencies=6, notBefore=10
+  9, "Training", duration=1.5, dependencies=6, notBefore=10
 ```
 
 ---
