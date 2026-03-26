@@ -58,16 +58,20 @@ function parseActivity(line) {
 
   let duration = null;
   let dependencies = [];
+  let notBeforeSlot = null;
 
   for (const extra of extras) {
     if (/^duration\s*=\s*(\d+)$/.test(extra)) {
       duration = parseInt(RegExp.$1, 10);
     } else if (/^dependencies\s*=\s*(.+)$/.test(extra)) {
       dependencies = RegExp.$1.split(/[\s,;]+/).map((dep) => dep.trim());
+    } else if (/^notBefore\s*=\s*(\d+)$/.test(extra)) {
+      const value = parseInt(RegExp.$1, 10);
+      if (!Number.isNaN(value)) notBeforeSlot = Math.max(1, value);
     }
   }
 
-  return { id, label, duration, dependencies };
+  return { id, label, duration, dependencies, notBeforeSlot };
 }
 
 function applyGrouping(entries) {
