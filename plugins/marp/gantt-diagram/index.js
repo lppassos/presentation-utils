@@ -58,16 +58,20 @@ function parseActivity(line) {
 
   let duration = null;
   let dependencies = [];
+  let notBeforeSlot = null;
 
   for (const extra of extras) {
     if (/^duration\s*=\s*(\d+)$/.test(extra)) {
       duration = parseInt(RegExp.$1, 10);
     } else if (/^dependencies\s*=\s*(.+)$/.test(extra)) {
       dependencies = RegExp.$1.split(/[\s,;]+/).map((dep) => dep.trim());
+    } else if (/^notBefore\s*=\s*(\d+)$/.test(extra)) {
+      const value = parseInt(RegExp.$1, 10);
+      if (!Number.isNaN(value)) notBeforeSlot = Math.max(1, value);
     }
   }
 
-  return { id, label, duration, dependencies };
+  return { id, label, duration, dependencies, notBeforeSlot };
 }
 
 function applyGrouping(entries) {
@@ -128,7 +132,11 @@ function computeSchedule(activities) {
 
       if (depsEnds.length !== deps.length) continue;
 
-      const startAt = depsEnds.length ? Math.max(...depsEnds) : 0;
+      const depsStartAt = depsEnds.length ? Math.max(...depsEnds) : 0;
+      const notBeforeStartAt = activity.notBeforeSlot
+        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+        : 0;
+      const startAt = Math.max(depsStartAt, notBeforeStartAt);
       activity.start = startAt;
       const duration = activity.isMilestone ? 0 : activity.duration || 0;
       activity.end = startAt + duration;
@@ -142,11 +150,17 @@ function computeSchedule(activities) {
 
   for (const activity of pending) {
     if (activity.isGroup || activity.isMilestone) {
-      activity.start = 0;
-      activity.end = 0;
+      const notBeforeStartAt = activity.notBeforeSlot
+        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+        : 0;
+      activity.start = notBeforeStartAt;
+      activity.end = notBeforeStartAt;
     } else {
-      activity.start = 0;
-      activity.end = activity.duration || 0;
+      const notBeforeStartAt = activity.notBeforeSlot
+        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+        : 0;
+      activity.start = notBeforeStartAt;
+      activity.end = notBeforeStartAt + (activity.duration || 0);
     }
     resolved[activity.id] = activity;
   }
@@ -170,7 +184,6 @@ function computeSchedule(activities) {
       }
     }
 
-    console.error(JSON.stringify([activity, descendants]));
     if (descendants.length >= 1) {
       let groupStart = 999999;
       let groupEnd = 0;
