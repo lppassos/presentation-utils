@@ -160,31 +160,77 @@ function computeSchedule(activities, groupDescendants) {
   const pending = activities.map((activity) => ({ ...activity }));
   const maxPasses = pending.length * 2;
 
+  const resolveActivity = (activity) => {
+    const deps = (activity.dependencyTokens || []).filter(Boolean);
+    const referenced = deps
+      .map((dep) => dep && dep.id)
+      .filter((id) => id !== undefined && id !== null);
+    const resolvedReferenced = referenced.filter((id) => resolved[id]);
+    if (resolvedReferenced.length !== referenced.length) return null;
+
+    const notBeforeStartAt = activity.notBeforeSlot
+      ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+      : 0;
+
+    const fsEnds = deps
+      .filter((dep) => dep.type === "FS")
+      .map((dep) => resolved[dep.id].end);
+    const ssStarts = deps
+      .filter((dep) => dep.type === "SS")
+      .map((dep) => resolved[dep.id].start);
+    const ffEnds = deps
+      .filter((dep) => dep.type === "FF")
+      .map((dep) => resolved[dep.id].end);
+
+    const startMin = Math.max(
+      notBeforeStartAt,
+      fsEnds.length ? Math.max(...fsEnds) : 0,
+      ssStarts.length ? Math.max(...ssStarts) : 0,
+    );
+    const endMin = ffEnds.length ? Math.max(...ffEnds) : 0;
+
+    const hasSS = ssStarts.length > 0;
+    const hasFF = ffEnds.length > 0;
+
+    const d = activity.isMilestone ? 0 : activity.duration || 0;
+
+    if (hasSS && hasFF) {
+      activity.start = startMin;
+      activity.end = Math.max(endMin, activity.start);
+      activity.duration = Math.max(0, activity.end - activity.start);
+    } else if (hasFF) {
+      activity.start = Math.max(startMin, endMin - d);
+      activity.end = activity.start + d;
+    } else {
+      activity.start = startMin;
+      activity.end = activity.start + d;
+    }
+
+    return activity;
+  };
+
   for (let pass = 0; pass < maxPasses; pass += 1) {
     let progressed = false;
 
-    // Resolve group summary ranges once all leaf descendants are resolved.
+    // Resolve groups once all leaf descendants are resolved.
     for (let i = pending.length - 1; i >= 0; i -= 1) {
       const activity = pending[i];
       if (!activity.isGroup) continue;
 
       const leafIds = (groupDescendants && groupDescendants[activity.id]) || [];
-      if (leafIds.length === 0) {
+      if (leafIds.length > 0 && !leafIds.every((id) => resolved[id])) continue;
+
+      activity.isMilestone = false;
+      activity.duration = 0;
+      if (leafIds.length > 0) {
+        const starts = leafIds.map((id) => resolved[id].start);
+        const ends = leafIds.map((id) => resolved[id].end);
+        activity.start = Math.min(...starts);
+        activity.end = Math.max(...ends);
+      } else {
         activity.start = 0;
         activity.end = 0;
-        activity.duration = 0;
-        resolved[activity.id] = activity;
-        pending.splice(i, 1);
-        progressed = true;
-        continue;
       }
-
-      if (!leafIds.every((id) => resolved[id])) continue;
-
-      const starts = leafIds.map((id) => resolved[id].start);
-      const ends = leafIds.map((id) => resolved[id].end);
-      activity.start = Math.min(...starts);
-      activity.end = Math.max(...ends);
       activity.duration = Math.max(0, activity.end - activity.start);
       resolved[activity.id] = activity;
       pending.splice(i, 1);
@@ -195,51 +241,7 @@ function computeSchedule(activities, groupDescendants) {
       const activity = pending[i];
       if (activity.isGroup) continue;
 
-      const deps = (activity.dependencyTokens || []).filter(Boolean);
-
-      const referenced = deps
-        .map((dep) => dep && dep.id)
-        .filter((id) => id !== undefined && id !== null);
-      const resolvedReferenced = referenced.filter((id) => resolved[id]);
-      if (resolvedReferenced.length !== referenced.length) continue;
-
-      const notBeforeStartAt = activity.notBeforeSlot
-        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
-        : 0;
-
-      const fsEnds = deps
-        .filter((dep) => dep.type === "FS")
-        .map((dep) => resolved[dep.id].end);
-      const ssStarts = deps
-        .filter((dep) => dep.type === "SS")
-        .map((dep) => resolved[dep.id].start);
-      const ffEnds = deps
-        .filter((dep) => dep.type === "FF")
-        .map((dep) => resolved[dep.id].end);
-
-      const startMin = Math.max(
-        notBeforeStartAt,
-        fsEnds.length ? Math.max(...fsEnds) : 0,
-        ssStarts.length ? Math.max(...ssStarts) : 0,
-      );
-      const endMin = ffEnds.length ? Math.max(...ffEnds) : 0;
-
-      const hasSS = ssStarts.length > 0;
-      const hasFF = ffEnds.length > 0;
-
-      const d = activity.isMilestone ? 0 : activity.duration || 0;
-
-      if (hasSS && hasFF) {
-        activity.start = startMin;
-        activity.end = Math.max(endMin, activity.start);
-        activity.duration = Math.max(0, activity.end - activity.start);
-      } else if (hasFF) {
-        activity.start = Math.max(startMin, endMin - d);
-        activity.end = activity.start + d;
-      } else {
-        activity.start = startMin;
-        activity.end = activity.start + d;
-      }
+      if (!resolveActivity(activity)) continue;
 
       resolved[activity.id] = activity;
       pending.splice(i, 1);
@@ -250,19 +252,26 @@ function computeSchedule(activities, groupDescendants) {
   }
 
   for (const activity of pending) {
-    if (activity.isGroup || activity.isMilestone) {
-      const notBeforeStartAt = activity.notBeforeSlot
-        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
-        : 0;
-      activity.start = notBeforeStartAt;
-      activity.end = notBeforeStartAt;
-    } else {
-      const notBeforeStartAt = activity.notBeforeSlot
-        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
-        : 0;
-      activity.start = notBeforeStartAt;
-      activity.end = notBeforeStartAt + (activity.duration || 0);
+    // Best-effort: if dependencies are resolvable now (including group ids), honor them.
+    // Otherwise keep previous fallback behavior.
+    const didResolve = resolveActivity(activity);
+
+    if (!didResolve) {
+      if (activity.isGroup || activity.isMilestone) {
+        const notBeforeStartAt = activity.notBeforeSlot
+          ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+          : 0;
+        activity.start = notBeforeStartAt;
+        activity.end = notBeforeStartAt;
+      } else {
+        const notBeforeStartAt = activity.notBeforeSlot
+          ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+          : 0;
+        activity.start = notBeforeStartAt;
+        activity.end = notBeforeStartAt + (activity.duration || 0);
+      }
     }
+
     resolved[activity.id] = activity;
   }
 
