@@ -19,8 +19,9 @@ activities:
     5, "Development", duration=6, dependencies=4
     6, "Tests", duration=2, dependencies=5
   7, "Launch", dependencies=6
-  8, "Support", duration=12, dependencies=7
-  9, "Training", duration=1.5, dependencies=6, notBefore=10
+  8, "Support", duration=12, dependencies=FF7
+  9, "Training", duration=1.5, dependencies=SS6, notBefore=10
+  10, "Wrap-up Window", duration=1, dependencies=SS6 FF8
 ----
 ```
 ```
