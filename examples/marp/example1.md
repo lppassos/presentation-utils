@@ -23,10 +23,11 @@ activities:
     5, "Development", duration=6, dependencies=3
     6, "Tests"
       6.1, "My real test", duration=2, dependencies=5
+  6.5, "Release Prep", duration=1, dependencies=4
   7, "Launch", dependencies=6
-  8, "Support", duration=12, dependencies=FF7
+  8, "Support", duration=12, dependencies=FF6.1
   9, "Training", duration=1.5, dependencies=SS6, notBefore=10
-  10, "Wrap-up Window", duration=1, dependencies=SS6 FF8
+  10, "Wrap-up Window", duration=1, dependencies=SS6.1 FF8
 ```
 
 ---
