@@ -143,21 +143,52 @@ function computeSchedule(activities) {
       const activity = pending[i];
       if (activity.isGroup) continue;
 
-      const deps = activity.dependencies || [];
-      const depsEnds = deps
-        .map((dep) => resolved[dep] && resolved[dep].end)
-        .filter((value) => value !== undefined && value !== null);
+      const deps = (activity.dependencyTokens || []).filter(Boolean);
 
-      if (depsEnds.length !== deps.length) continue;
+      const referenced = deps
+        .map((dep) => dep && dep.id)
+        .filter((id) => id !== undefined && id !== null);
+      const resolvedReferenced = referenced.filter((id) => resolved[id]);
+      if (resolvedReferenced.length !== referenced.length) continue;
 
-      const depsStartAt = depsEnds.length ? Math.max(...depsEnds) : 0;
       const notBeforeStartAt = activity.notBeforeSlot
         ? Math.max(0, Number(activity.notBeforeSlot) - 1)
         : 0;
-      const startAt = Math.max(depsStartAt, notBeforeStartAt);
-      activity.start = startAt;
-      const duration = activity.isMilestone ? 0 : activity.duration || 0;
-      activity.end = startAt + duration;
+
+      const fsEnds = deps
+        .filter((dep) => dep.type === "FS")
+        .map((dep) => resolved[dep.id].end);
+      const ssStarts = deps
+        .filter((dep) => dep.type === "SS")
+        .map((dep) => resolved[dep.id].start);
+      const ffEnds = deps
+        .filter((dep) => dep.type === "FF")
+        .map((dep) => resolved[dep.id].end);
+
+      const startMin = Math.max(
+        notBeforeStartAt,
+        fsEnds.length ? Math.max(...fsEnds) : 0,
+        ssStarts.length ? Math.max(...ssStarts) : 0,
+      );
+      const endMin = ffEnds.length ? Math.max(...ffEnds) : 0;
+
+      const hasSS = ssStarts.length > 0;
+      const hasFF = ffEnds.length > 0;
+
+      const d = activity.isMilestone ? 0 : activity.duration || 0;
+
+      if (hasSS && hasFF) {
+        activity.start = startMin;
+        activity.end = Math.max(endMin, activity.start);
+        activity.duration = Math.max(0, activity.end - activity.start);
+      } else if (hasFF) {
+        activity.start = Math.max(startMin, endMin - d);
+        activity.end = activity.start + d;
+      } else {
+        activity.start = startMin;
+        activity.end = activity.start + d;
+      }
+
       resolved[activity.id] = activity;
       pending.splice(i, 1);
       progressed = true;
