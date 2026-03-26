@@ -54,6 +54,12 @@ Dependency tokens can optionally be prefixed:
 - `SS<id>`: Start-to-Start (task start is constrained to be >= dependency start)
 - `FF<id>`: Finish-to-Finish (task end is constrained to be >= dependency end)
 
+Dependency ids can reference either task ids or group ids. When a dependency targets a group id, the dependency resolves to the group's summary range computed from its leaf descendants (start=min leaf start, end=max leaf end):
+
+- `FS<id>` (or bare `<id>`): constrains the dependent start to be >= dependency end
+- `SS<id>`: constrains the dependent start to be >= dependency start
+- `FF<id>`: constrains the dependent end to be >= dependency end
+
 If a task has both `SS` and `FF` dependencies in the same `dependencies` list, its configured `duration` is ignored and derived from the constraints.
 
 The colors and fonts to use will be picked up from the theme.

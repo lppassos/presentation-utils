@@ -23,6 +23,12 @@ activities:
 ```
 ```
 
+Dependencies can reference either task ids or group ids. When a dependency targets a group id, the dependency resolves to the group's summary range computed from its leaf descendants (start=min leaf start, end=max leaf end):
+
+- `FS<id>` (or bare `<id>`): constrains the dependent start to be >= dependency end
+- `SS<id>`: constrains the dependent start to be >= dependency start
+- `FF<id>`: constrains the dependent end to be >= dependency end
+
 
 This will produce a gantt diagram where time is shown in weeks, in this case with 23 weeks. Consider the following mockup as an example of what should be rendered in the png to include in the pdf document rendering.
 

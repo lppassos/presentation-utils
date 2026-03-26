@@ -53,11 +53,35 @@ function parseGanttBlock(content) {
   }
 
   const activities = applyGrouping(rawEntries);
-  const computed = computeSchedule(activities);
+  const groupDescendants = buildGroupDescendants(activities);
+  const computed = computeSchedule(activities, groupDescendants);
   const totalUnits = Math.max(0, ...computed.map((activity) => activity.end || 0));
   const columns = Math.max(1, Math.ceil(totalUnits));
 
   return { period, activities: computed, totalUnits, columns, groupBars };
+}
+
+function buildGroupDescendants(activities) {
+  const groupDescendants = {};
+
+  activities.forEach((activity, index) => {
+    if (!activity.isGroup) return;
+
+    const groupLevel = activity.indentLevel;
+    const leafDescendants = [];
+
+    for (
+      let j = index + 1;
+      j < activities.length && activities[j].indentLevel > groupLevel;
+      j += 1
+    ) {
+      if (!activities[j].isGroup) leafDescendants.push(activities[j].id);
+    }
+
+    groupDescendants[activity.id] = leafDescendants;
+  });
+
+  return groupDescendants;
 }
 
 function parseActivity(line) {
@@ -131,63 +155,93 @@ function applyGrouping(entries) {
   return grouped;
 }
 
-function computeSchedule(activities) {
+function computeSchedule(activities, groupDescendants) {
   const resolved = {};
   const pending = activities.map((activity) => ({ ...activity }));
   const maxPasses = pending.length * 2;
 
+  const resolveActivity = (activity) => {
+    const deps = (activity.dependencyTokens || []).filter(Boolean);
+    const referenced = deps
+      .map((dep) => dep && dep.id)
+      .filter((id) => id !== undefined && id !== null);
+    const resolvedReferenced = referenced.filter((id) => resolved[id]);
+    if (resolvedReferenced.length !== referenced.length) return null;
+
+    const notBeforeStartAt = activity.notBeforeSlot
+      ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+      : 0;
+
+    const fsEnds = deps
+      .filter((dep) => dep.type === "FS")
+      .map((dep) => resolved[dep.id].end);
+    const ssStarts = deps
+      .filter((dep) => dep.type === "SS")
+      .map((dep) => resolved[dep.id].start);
+    const ffEnds = deps
+      .filter((dep) => dep.type === "FF")
+      .map((dep) => resolved[dep.id].end);
+
+    const startMin = Math.max(
+      notBeforeStartAt,
+      fsEnds.length ? Math.max(...fsEnds) : 0,
+      ssStarts.length ? Math.max(...ssStarts) : 0,
+    );
+    const endMin = ffEnds.length ? Math.max(...ffEnds) : 0;
+
+    const hasSS = ssStarts.length > 0;
+    const hasFF = ffEnds.length > 0;
+
+    const d = activity.isMilestone ? 0 : activity.duration || 0;
+
+    if (hasSS && hasFF) {
+      activity.start = startMin;
+      activity.end = Math.max(endMin, activity.start);
+      activity.duration = Math.max(0, activity.end - activity.start);
+    } else if (hasFF) {
+      activity.start = Math.max(startMin, endMin - d);
+      activity.end = activity.start + d;
+    } else {
+      activity.start = startMin;
+      activity.end = activity.start + d;
+    }
+
+    return activity;
+  };
+
   for (let pass = 0; pass < maxPasses; pass += 1) {
     let progressed = false;
+
+    // Resolve groups once all leaf descendants are resolved.
+    for (let i = pending.length - 1; i >= 0; i -= 1) {
+      const activity = pending[i];
+      if (!activity.isGroup) continue;
+
+      const leafIds = (groupDescendants && groupDescendants[activity.id]) || [];
+      if (leafIds.length > 0 && !leafIds.every((id) => resolved[id])) continue;
+
+      activity.isMilestone = false;
+      activity.duration = 0;
+      if (leafIds.length > 0) {
+        const starts = leafIds.map((id) => resolved[id].start);
+        const ends = leafIds.map((id) => resolved[id].end);
+        activity.start = Math.min(...starts);
+        activity.end = Math.max(...ends);
+      } else {
+        activity.start = 0;
+        activity.end = 0;
+      }
+      activity.duration = Math.max(0, activity.end - activity.start);
+      resolved[activity.id] = activity;
+      pending.splice(i, 1);
+      progressed = true;
+    }
 
     for (let i = pending.length - 1; i >= 0; i -= 1) {
       const activity = pending[i];
       if (activity.isGroup) continue;
 
-      const deps = (activity.dependencyTokens || []).filter(Boolean);
-
-      const referenced = deps
-        .map((dep) => dep && dep.id)
-        .filter((id) => id !== undefined && id !== null);
-      const resolvedReferenced = referenced.filter((id) => resolved[id]);
-      if (resolvedReferenced.length !== referenced.length) continue;
-
-      const notBeforeStartAt = activity.notBeforeSlot
-        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
-        : 0;
-
-      const fsEnds = deps
-        .filter((dep) => dep.type === "FS")
-        .map((dep) => resolved[dep.id].end);
-      const ssStarts = deps
-        .filter((dep) => dep.type === "SS")
-        .map((dep) => resolved[dep.id].start);
-      const ffEnds = deps
-        .filter((dep) => dep.type === "FF")
-        .map((dep) => resolved[dep.id].end);
-
-      const startMin = Math.max(
-        notBeforeStartAt,
-        fsEnds.length ? Math.max(...fsEnds) : 0,
-        ssStarts.length ? Math.max(...ssStarts) : 0,
-      );
-      const endMin = ffEnds.length ? Math.max(...ffEnds) : 0;
-
-      const hasSS = ssStarts.length > 0;
-      const hasFF = ffEnds.length > 0;
-
-      const d = activity.isMilestone ? 0 : activity.duration || 0;
-
-      if (hasSS && hasFF) {
-        activity.start = startMin;
-        activity.end = Math.max(endMin, activity.start);
-        activity.duration = Math.max(0, activity.end - activity.start);
-      } else if (hasFF) {
-        activity.start = Math.max(startMin, endMin - d);
-        activity.end = activity.start + d;
-      } else {
-        activity.start = startMin;
-        activity.end = activity.start + d;
-      }
+      if (!resolveActivity(activity)) continue;
 
       resolved[activity.id] = activity;
       pending.splice(i, 1);
@@ -198,58 +252,36 @@ function computeSchedule(activities) {
   }
 
   for (const activity of pending) {
-    if (activity.isGroup || activity.isMilestone) {
-      const notBeforeStartAt = activity.notBeforeSlot
-        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
-        : 0;
-      activity.start = notBeforeStartAt;
-      activity.end = notBeforeStartAt;
-    } else {
-      const notBeforeStartAt = activity.notBeforeSlot
-        ? Math.max(0, Number(activity.notBeforeSlot) - 1)
-        : 0;
-      activity.start = notBeforeStartAt;
-      activity.end = notBeforeStartAt + (activity.duration || 0);
+    // Best-effort: if dependencies are resolvable now (including group ids), honor them.
+    // Otherwise keep previous fallback behavior.
+    const didResolve = resolveActivity(activity);
+
+    if (!didResolve) {
+      if (activity.isGroup || activity.isMilestone) {
+        const notBeforeStartAt = activity.notBeforeSlot
+          ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+          : 0;
+        activity.start = notBeforeStartAt;
+        activity.end = notBeforeStartAt;
+      } else {
+        const notBeforeStartAt = activity.notBeforeSlot
+          ? Math.max(0, Number(activity.notBeforeSlot) - 1)
+          : 0;
+        activity.start = notBeforeStartAt;
+        activity.end = notBeforeStartAt + (activity.duration || 0);
+      }
     }
+
     resolved[activity.id] = activity;
   }
 
   let ordered = activities.map((activity) => resolved[activity.id] || activity);
 
-  ordered.forEach((activity, index) => {
-    if (!activity.isGroup) {
-      return;
-    }
-
-    let groupLevel = activity.indentLevel;
-    let descendants = [];
-    for (
-      let j = index + 1;
-      j < ordered.length && ordered[j].indentLevel > groupLevel;
-      j++
-    ) {
-      if (!ordered[j].isGroup) {
-        descendants.push(ordered[j]);
-      }
-    }
-
-    if (descendants.length >= 1) {
-      let groupStart = 999999;
-      let groupEnd = 0;
-      descendants.forEach((a) => {
-        if (groupStart > a.start) groupStart = a.start;
-        if (groupEnd < a.end) groupEnd = a.end;
-      });
-      activity.start = groupStart;
-      activity.end = groupEnd;
-      activity.duration = groupEnd - groupStart;
-      activity.hasGroupBar = descendants.length > 1;
-    } else {
-      activity.start = 0;
-      activity.end = 0;
-      activity.duration = 0;
-      activity.hasGroupBar = false;
-    }
+  // Render-only flags: compute whether a group has >1 leaf descendant.
+  ordered.forEach((activity) => {
+    if (!activity.isGroup) return;
+    const leafIds = (groupDescendants && groupDescendants[activity.id]) || [];
+    activity.hasGroupBar = leafIds.length > 1;
   });
 
   return ordered;

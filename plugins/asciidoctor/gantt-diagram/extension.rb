@@ -54,7 +54,9 @@ module PresentationUtils
 
         activities = apply_grouping(raw_entries)
 
-        computed = compute_schedule(activities)
+        group_descendants = build_group_descendants(activities)
+
+        computed = compute_schedule(activities, group_descendants)
         total_units = computed.map { |activity| activity[:end] }.max || 0.0
 
         create_block parent, :open, nil, attrs.merge({
@@ -66,6 +68,27 @@ module PresentationUtils
             'total-units' => total_units,
           }
         })
+      end
+
+      def build_group_descendants(activities)
+        map = {}
+
+        activities.each_with_index do |activity, idx|
+          next unless activity[:is_group]
+
+          group_level = activity[:indent_level].to_i
+          leaf_ids = []
+
+          j = idx + 1
+          while j < activities.length && activities[j][:indent_level].to_i > group_level
+            leaf_ids << activities[j][:id] unless activities[j][:is_group]
+            j += 1
+          end
+
+          map[activity[:id]] = leaf_ids
+        end
+
+        map
       end
 
       def parse_activity(line)
@@ -122,57 +145,88 @@ module PresentationUtils
         { type: "FS", id: token }
       end
 
-      def compute_schedule(activities)
+      def compute_schedule(activities, group_descendants)
         resolved = {}
         pending = activities.map(&:dup)
         max_passes = pending.size * 2
+
+        resolve_activity = lambda do |activity|
+          deps = (activity[:dependency_tokens] || []).compact
+          referenced = deps.map { |dep| dep[:id] }.compact
+          resolved_referenced = referenced.select { |id| resolved[id] }
+          return nil unless resolved_referenced.size == referenced.size
+
+          not_before_start_at = activity[:not_before_slot] ? (activity[:not_before_slot].to_f - 1.0) : 0.0
+
+          fs_ends = deps
+            .select { |dep| dep[:type] == "FS" }
+            .map { |dep| resolved[dep[:id]][:end].to_f }
+          ss_starts = deps
+            .select { |dep| dep[:type] == "SS" }
+            .map { |dep| resolved[dep[:id]][:start].to_f }
+          ff_ends = deps
+            .select { |dep| dep[:type] == "FF" }
+            .map { |dep| resolved[dep[:id]][:end].to_f }
+
+          start_min = [
+            not_before_start_at.to_f,
+            (fs_ends.max || 0.0),
+            (ss_starts.max || 0.0),
+          ].max
+          end_min = ff_ends.max || 0.0
+
+          has_ss = !ss_starts.empty?
+          has_ff = !ff_ends.empty?
+
+          d = activity[:is_milestone] ? 0.0 : (activity[:duration] || 0.0).to_f
+
+          if has_ss && has_ff
+            activity[:start] = start_min
+            activity[:end] = [end_min, activity[:start]].max
+            activity[:duration] = [0.0, activity[:end] - activity[:start]].max
+          elsif has_ff
+            activity[:start] = [start_min, end_min - d].max
+            activity[:end] = activity[:start] + d
+          else
+            activity[:start] = start_min
+            activity[:end] = activity[:start] + d
+          end
+
+          activity
+        end
 
         max_passes.times do
           progressed = false
 
           pending.delete_if do |activity|
+            next false unless activity[:is_group]
+
+            leaf_ids = (group_descendants && group_descendants[activity[:id]]) || []
+            next false if leaf_ids.size > 0 && !leaf_ids.all? { |id| resolved[id] }
+
+            activity[:is_milestone] = false
+            activity[:duration] = 0.0
+
+            if leaf_ids.size > 0
+              starts = leaf_ids.map { |id| resolved[id][:start].to_f }
+              ends = leaf_ids.map { |id| resolved[id][:end].to_f }
+              activity[:start] = starts.min
+              activity[:end] = ends.max
+            else
+              activity[:start] = 0.0
+              activity[:end] = 0.0
+            end
+            activity[:duration] = [0.0, activity[:end] - activity[:start]].max
+
+            resolved[activity[:id]] = activity
+            progressed = true
+            true
+          end
+
+          pending.delete_if do |activity|
             next false if activity[:is_group]
 
-            deps = (activity[:dependency_tokens] || []).compact
-            referenced = deps.map { |dep| dep[:id] }.compact
-            resolved_referenced = referenced.select { |id| resolved[id] }
-            next false unless resolved_referenced.size == referenced.size
-
-            not_before_start_at = activity[:not_before_slot] ? (activity[:not_before_slot].to_f - 1.0) : 0.0
-
-            fs_ends = deps
-              .select { |dep| dep[:type] == "FS" }
-              .map { |dep| resolved[dep[:id]][:end].to_f }
-            ss_starts = deps
-              .select { |dep| dep[:type] == "SS" }
-              .map { |dep| resolved[dep[:id]][:start].to_f }
-            ff_ends = deps
-              .select { |dep| dep[:type] == "FF" }
-              .map { |dep| resolved[dep[:id]][:end].to_f }
-
-            start_min = [
-              not_before_start_at.to_f,
-              (fs_ends.max || 0.0),
-              (ss_starts.max || 0.0),
-            ].max
-            end_min = ff_ends.max || 0.0
-
-            has_ss = !ss_starts.empty?
-            has_ff = !ff_ends.empty?
-
-            d = activity[:is_milestone] ? 0.0 : (activity[:duration] || 0.0).to_f
-
-            if has_ss && has_ff
-              activity[:start] = start_min
-              activity[:end] = [end_min, activity[:start]].max
-              activity[:duration] = [0.0, activity[:end] - activity[:start]].max
-            elsif has_ff
-              activity[:start] = [start_min, end_min - d].max
-              activity[:end] = activity[:start] + d
-            else
-              activity[:start] = start_min
-              activity[:end] = activity[:start] + d
-            end
+            next false unless resolve_activity.call(activity)
 
             resolved[activity[:id]] = activity
             progressed = true
@@ -183,53 +237,34 @@ module PresentationUtils
         end
 
         pending.each do |activity|
-          if activity[:is_group]
-            activity[:start] = 0
-            activity[:end] = 0
-            activity[:duration] = 0
-            activity[:has_group_bar] = false
-          elsif activity[:is_milestone]
-            not_before_start_at = activity[:not_before_slot] ? (activity[:not_before_slot].to_f - 1.0) : 0.0
-            activity[:start] = not_before_start_at
-            activity[:end] = not_before_start_at
-          else
-            not_before_start_at = activity[:not_before_slot] ? (activity[:not_before_slot].to_f - 1.0) : 0.0
-            activity[:start] = not_before_start_at
-            activity[:end] = not_before_start_at + (activity[:duration] || 0.0)
+          did_resolve = resolve_activity.call(activity)
+
+          unless did_resolve
+            if activity[:is_group]
+              activity[:start] = 0.0
+              activity[:end] = 0.0
+              activity[:duration] = 0.0
+              activity[:has_group_bar] = false
+            elsif activity[:is_milestone]
+              not_before_start_at = activity[:not_before_slot] ? (activity[:not_before_slot].to_f - 1.0) : 0.0
+              activity[:start] = not_before_start_at
+              activity[:end] = not_before_start_at
+            else
+              not_before_start_at = activity[:not_before_slot] ? (activity[:not_before_slot].to_f - 1.0) : 0.0
+              activity[:start] = not_before_start_at
+              activity[:end] = not_before_start_at + (activity[:duration] || 0.0)
+            end
           end
+
           resolved[activity[:id]] = activity
         end
 
         ordered = activities.map { |activity| resolved[activity[:id]] }
 
-        ordered.each_with_index do |activity, idx|
+        ordered.each do |activity|
           next unless activity[:is_group]
-
-          group_level = activity[:indent_level].to_i
-          descendants = []
-
-          j = idx + 1
-          while j < ordered.length && ordered[j][:indent_level].to_i > group_level
-            descendants << ordered[j]
-            j += 1
-          end
-
-          tasks = descendants.reject { |entry| entry[:is_group] }
-
-          if tasks.size >= 1
-            group_start = tasks.map { |t| t[:start].to_f }.min
-            group_end = tasks.map { |t| t[:end].to_f }.max
-
-            activity[:start] = group_start
-            activity[:end] = group_end
-            activity[:duration] = group_end - group_start
-            activity[:has_group_bar] = tasks.size > 1
-          else
-            activity[:start] = 0
-            activity[:end] = 0
-            activity[:duration] = 0
-            activity[:has_group_bar] = false
-          end
+          leaf_ids = (group_descendants && group_descendants[activity[:id]]) || []
+          activity[:has_group_bar] = leaf_ids.size > 1
         end
 
         ordered
