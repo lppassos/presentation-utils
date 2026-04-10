@@ -31,6 +31,27 @@ module PresentationUtils
 
         File.expand_path(target, base)
       end
+
+      # Returns the absolute path where the converted PNG will be written.
+      # Uses imagesoutdir when set; falls back to imagesdir, then docdir.
+      # The PNG filename is derived from the .drawio basename only (no sub-directories
+      # inside imagesoutdir), with the extension replaced by .png.
+      def png_output_path(doc, target)
+        docdir      = doc.attr('docdir', Dir.pwd).to_s
+        imagesdir   = doc.attr('imagesdir', '').to_s
+        imagesoutdir = doc.attr('imagesoutdir', '').to_s
+
+        outdir = if !imagesoutdir.empty?
+                   File.absolute_path?(imagesoutdir) ? imagesoutdir : File.expand_path(imagesoutdir, docdir)
+                 elsif !imagesdir.empty?
+                   File.absolute_path?(imagesdir) ? imagesdir : File.expand_path(imagesdir, docdir)
+                 else
+                   docdir
+                 end
+
+        basename = File.basename(target, '.*') + '.png'
+        File.join(outdir, basename)
+      end
     end
   end
 end
