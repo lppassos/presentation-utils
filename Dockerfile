@@ -33,6 +33,7 @@ RUN set -euo pipefail; \
     qpdf \
     ruby-full \
     xvfb \
+    xauth \
   && curl -fsSL -o /tmp/drawio.deb "$url" \
   && apt-get install -y --no-install-recommends /tmp/drawio.deb \
   && rm -rf /var/lib/apt/lists/* \
@@ -71,6 +72,7 @@ COPY bin/convertto-presentation /usr/local/bin/convertto-presentation
 COPY bin/presentations-utils /usr/local/bin/presentations-utils
 COPY bin/marp-theme-embed.js /usr/local/lib/marp-theme-embed.js
 COPY bin/engine.mjs /usr/local/lib/engine.mjs
+COPY bin/marp-preprocess.mjs /usr/local/lib/marp-preprocess.mjs
 COPY bin/path-utils.sh /usr/local/lib/path-utils.sh
 COPY bin/puppeteer-config.json /usr/local/lib/puppeteer-config.json
 COPY plugins/asciidoctor/ /plugins/asciidoctor/
