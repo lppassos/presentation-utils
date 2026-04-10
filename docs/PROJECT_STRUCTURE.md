@@ -20,6 +20,7 @@ This document describes the layout of the `presentation-utils` repository and th
 - `convertto-png`: Converts draw.io diagrams to PNG using headless draw.io.
 - `convertto-presentation`: Converts Marp Markdown to PDF or HTML with theme embedding.
 - `marp-theme-embed.js`: Inlines @import rules and embeds local assets into Marp theme CSS.
+- `marp-preprocess.mjs`: Pre-processing pipeline for Marp presentations. Runs all registered preprocessor modules (e.g. `drawio-image`) on the input markdown before `marp` is invoked, writes the result to a temp file next to the original (so relative paths remain valid), and prints the temp file path to stdout. New preprocessors can be added by dropping a module into `plugins/marp/` and registering it here.
 
 ## themes/
 
@@ -41,3 +42,6 @@ This document describes the layout of the `presentation-utils` repository and th
   - `plugins/asciidoctor/gantt-diagram/`: Block processor and PDF converter override that renders Gantt charts as SVG images.
   - `plugins/asciidoctor/last-page-marker/`: PDF converter override that stamps a configurable marker image on the last page.
   - `plugins/asciidoctor/drawio-image/`: TreeProcessor extension that detects image references with a `.drawio` extension, exports them to PNG via headless draw.io (`xvfb-run drawio`), and rewrites the image target to the generated PNG before the PDF converter runs. Conversion is skipped when an up-to-date PNG already exists.
+- `plugins/marp/`: Marp markdown-it plugins and pre-processor modules loaded by the conversion pipeline.
+  - `plugins/marp/gantt-diagram/`: markdown-it fence plugin that renders `gantt` code blocks as inline SVG Gantt charts.
+  - `plugins/marp/drawio-image/`: Pre-processor module (used by `marp-preprocess.mjs`) that detects standard Markdown image references with a `.drawio` extension, exports each diagram to a transparent PNG under `.imggen/` via headless draw.io (`xvfb-run drawio --transparent`), and rewrites the image src to the generated PNG. Conversion is skipped when an up-to-date PNG already exists.
