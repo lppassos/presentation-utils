@@ -37,3 +37,7 @@ This document describes the layout of the `presentation-utils` repository and th
 ## plugins/
 
 - `plugins/asciidoctor/`: Asciidoctor extensions loaded by conversion scripts.
+  - `plugins/asciidoctor/advanced-title-page/`: PDF converter override that renders a customisable title page layout.
+  - `plugins/asciidoctor/gantt-diagram/`: Block processor and PDF converter override that renders Gantt charts as SVG images.
+  - `plugins/asciidoctor/last-page-marker/`: PDF converter override that stamps a configurable marker image on the last page.
+  - `plugins/asciidoctor/drawio-image/`: TreeProcessor extension that detects image references with a `.drawio` extension, exports them to PNG via headless draw.io (`xvfb-run drawio`), and rewrites the image target to the generated PNG before the PDF converter runs. Conversion is skipped when an up-to-date PNG already exists.
