@@ -60,6 +60,19 @@ module PresentationUtils
 
         File.mtime(drawio_path) > File.mtime(png_path)
       end
+
+      # Shells out to drawio (via xvfb-run for headless operation) to export the
+      # .drawio diagram as a PNG.  Raises RuntimeError on non-zero exit.
+      def convert_to_png(drawio_path, png_path)
+        FileUtils.mkdir_p(File.dirname(png_path))
+
+        cmd = ['xvfb-run', '-a', 'drawio', '--no-sandbox', '-x', '-f', 'png', '-o', png_path, drawio_path]
+        output, status = Open3.capture2e(*cmd)
+
+        return if status.success?
+
+        raise "drawio export failed for #{drawio_path} (exit #{status.exitstatus}): #{output.strip}"
+      end
     end
   end
 end
