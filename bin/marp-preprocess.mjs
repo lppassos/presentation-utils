@@ -37,7 +37,11 @@ const {
   preprocess: drawioPreprocess,
 } = require("/plugins/marp/drawio-image/index.js");
 
-const preprocessors = [drawioPreprocess];
+const {
+  preprocess: mermaidPreprocess,
+} = require("/plugins/marp/mermaid-diagram/index.js");
+
+const preprocessors = [drawioPreprocess, mermaidPreprocess];
 
 // ---------------------------------------------------------------------------
 // Main
