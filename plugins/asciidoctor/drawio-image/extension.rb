@@ -52,6 +52,14 @@ module PresentationUtils
         basename = File.basename(target, '.*') + '.png'
         File.join(outdir, basename)
       end
+
+      # Returns true when the PNG does not yet exist or when the .drawio source is
+      # newer than the existing PNG, meaning a fresh export is required.
+      def conversion_needed?(drawio_path, png_path)
+        return true unless File.exist?(png_path)
+
+        File.mtime(drawio_path) > File.mtime(png_path)
+      end
     end
   end
 end
