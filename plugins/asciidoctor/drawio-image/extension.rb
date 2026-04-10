@@ -8,7 +8,30 @@ module PresentationUtils
     class DrawioImageProcessor < Asciidoctor::Extensions::TreeProcessor
       include Asciidoctor::Logging
 
-      def process(_document)
+      def process(document)
+        # Collect block images (context :image) and inline images (context :inline_image).
+        nodes = document.find_by(context: :image)
+        nodes += document.find_by(context: :inline_image)
+
+        nodes.each do |node|
+          target = node.attr('target').to_s
+          next unless target.end_with?('.drawio')
+
+          drawio_path = resolve_drawio_path(document, target)
+          png_path    = png_output_path(document, target)
+
+          if conversion_needed?(drawio_path, png_path)
+            begin
+              convert_to_png(drawio_path, png_path)
+            rescue StandardError => e
+              logger.error "drawio-image: skipping #{target} — #{e.message}"
+              next
+            end
+          end
+
+          node.set_attr('target', png_path)
+        end
+
         nil
       end
 
