@@ -138,7 +138,7 @@ cleanup() {
   if [[ -n "${compiled_theme:-}" && -f "${compiled_theme:-}" ]]; then
     rm -f "$compiled_theme" || true
   fi
-  if [[ -n "${preprocessed_path:-}" && -d "${preprocessed_path:-}" ]]; then
+  if [[ -n "${preprocessed_path:-}" && -f "${preprocessed_path:-}" ]]; then
     rm -rf "$preprocessed_path" || true
   fi
 }
