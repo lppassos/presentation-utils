@@ -18,6 +18,53 @@ function conversionNeeded(pngAbsPath) {
   return !fs.existsSync(pngAbsPath);
 }
 
+
+/**
+ * Extracts the Mermaid background color by an init.
+ *
+ * Scans `mermaidContent` for Mermaid init  and returns
+ * `"transparent"` when the diagram explicitly requests a transparent
+ * background.
+ *
+ * @param {string} mermaidContent  Raw mermaid diagram source.
+ * @returns {string|null}          The background color to pass to mmdc, or null.
+ */
+function getMermaidBackgroundColor(mermaidContent) {
+  const initDirectives = mermaidContent.match(/%%\{init:[\s\S]*?\}%%/gi) || [];
+
+  for (const directive of initDirectives) {
+    const hasTransparentBackground = /["']?(?:background)["']?\s*:\s*["']transparent["']/i.test(
+      directive,
+    );
+
+    if (hasTransparentBackground) {
+      return "transparent";
+    }
+  }
+
+  return null;
+}
+
+
+/**
+ * Builds the SHA-256 cache key for a Mermaid diagram render.
+ *
+ * Includes the background color in the hashed content so that the generated
+ * PNG cache is invalidated when the same Mermaid source is rendered
+ * with a different background configuration.
+ *
+ * @param {string} mermaidContent  Raw mermaid diagram source.
+ * @returns {string}               SHA-256 hash used for the generated PNG name.
+ */
+function renderHash(mermaidContent) {
+  const backgroundColor = getMermaidBackgroundColor(mermaidContent) || "default";
+  return crypto
+    .createHash("sha256")
+    .update(`background=${backgroundColor}\n${mermaidContent}`)
+    .digest("hex");
+}
+
+
 /**
  * Renders a Mermaid diagram to a PNG using the mmdc CLI.
  *
@@ -42,6 +89,12 @@ function convertToImg(mermaidContent, pngAbsPath) {
     "-p",
     "/usr/local/lib/puppeteer-config.json",
   ];
+
+  const backgroundColor = getMermaidBackgroundColor(mermaidContent);
+    if (backgroundColor) {
+      mmdcArgs.push("-b", backgroundColor);
+    }
+
   try {
     const result = cp.spawnSync("mmdc", mmdcArgs, {
       encoding: "utf8",
@@ -85,7 +138,7 @@ function preprocess(markdownText, { inputDir }) {
   const mermaidRegex = /^```mermaid( \[[^\]]*\])?\r?\n([\s\S]*?)^```/gm;
 
   return markdownText.replace(mermaidRegex, (match, options, content) => {
-    const hash = crypto.createHash("sha256").update(content).digest("hex");
+    const hash = renderHash(content);
     const pngRelPath = path.join(".imggen", `mermaid-${hash}.png`);
     const pngAbsPath = path.join(inputDir, pngRelPath);
 
@@ -106,4 +159,10 @@ function preprocess(markdownText, { inputDir }) {
   });
 }
 
-module.exports = { preprocess, conversionNeeded, convertToImg };
+module.exports = {
+  preprocess,
+  conversionNeeded,
+  convertToImg,
+  getMermaidBackgroundColor,
+  renderHash,
+};
