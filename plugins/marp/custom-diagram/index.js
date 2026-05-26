@@ -44,7 +44,7 @@ function renderRadialTeamSvg(members) {
     `  <rect x="0" y="0" width="${layout.width}" height="${layout.height}" class="custom-diagram-background"/>`,
   );
   lines.push(
-    `  <rect x="${layout.centerX}" y="${layout.centerY}" width="${layout.centerWidth}" height="${layout.centerHeight}" rx="32" class="custom-diagram-center"/>`,
+    `  <rect x="${layout.centerX}" y="${layout.centerY}" width="${layout.centerWidth}" height="${layout.centerHeight}" rx="32" class="custom-diagram-center custom-diagram-center-fill"/>`,
   );
   lines.push(
     `  <text x="${layout.centerX + layout.centerWidth / 2}" y="${layout.centerY + 52}" text-anchor="middle" font-size="24" font-weight="700" class="custom-diagram-center-label">Team</text>`,
@@ -61,7 +61,7 @@ function renderRadialTeamSvg(members) {
       `  <g class="custom-diagram-member custom-diagram-member-color-${member.colorIndex}">`,
     );
     lines.push(
-      `    <rect x="${member.x}" y="${member.y}" width="${layout.memberWidth}" height="${layout.memberHeight}" rx="22" class="custom-diagram-member-fill"/>`,
+      `    <rect x="${member.x}" y="${member.y}" width="${layout.memberWidth}" height="${layout.memberHeight}" rx="22" class="custom-diagram-member-fill custom-diagram-member-stroke"/>`,
     );
     lines.push(
       `    <text x="${member.x + layout.memberWidth / 2}" y="${member.y + 28}" text-anchor="middle" font-size="16" font-weight="700" class="custom-diagram-member-name">${escapeXml(member.name)}</text>`,
