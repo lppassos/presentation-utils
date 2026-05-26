@@ -93,6 +93,7 @@ asciidoctor_args=(
   -r asciidoctor-pdf
   -r asciidoctor-diagram
   -r /plugins/asciidoctor/gantt-diagram/extension.rb
+  -r /plugins/asciidoctor/custom-diagram/extension.rb
   -r /plugins/asciidoctor/advanced-title-page/extension.rb
   -r /plugins/asciidoctor/last-page-marker/extension.rb
   -r /plugins/asciidoctor/drawio-image/extension.rb
