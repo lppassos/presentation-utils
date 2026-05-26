@@ -61,7 +61,7 @@ module PresentationUtils
 
         output_path = resolve_output_path(node.document, target)
         FileUtils.mkdir_p(File.dirname(output_path))
-        File.write(output_path, render_svg(data))
+        File.write(output_path, render_svg(node.document, data))
 
         render_image = ::Asciidoctor::Block.new(
           node.parent,
@@ -95,28 +95,29 @@ module PresentationUtils
         File.join(images_outdir, target)
       end
 
-      def render_svg(data)
-        return render_radial_team_svg(data['members'] || []) if data['type'] == 'radial-team'
+      def render_svg(document, data)
+        return render_radial_team_svg(document, data['members'] || []) if data['type'] == 'radial-team'
 
         render_unknown_svg(data['type'])
       end
 
-      def render_radial_team_svg(members)
-        layout = radial_team_layout(members)
+      def render_radial_team_svg(document, members)
+        settings = radial_team_settings(document)
+        layout = radial_team_layout(members, settings)
         lines = []
         lines << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"#{layout[:width]}\" height=\"#{layout[:height]}\" viewBox=\"0 0 #{layout[:width]} #{layout[:height]}\">"
-        lines << "  <rect x=\"0\" y=\"0\" width=\"#{layout[:width]}\" height=\"#{layout[:height]}\" fill=\"white\"/>"
-        lines << "  <rect x=\"#{layout[:center_x]}\" y=\"#{layout[:center_y]}\" width=\"#{layout[:center_width]}\" height=\"#{layout[:center_height]}\" rx=\"32\" fill=\"#eef4f8\" stroke=\"#6f8798\" stroke-width=\"2\"/>"
-        lines << "  <text x=\"#{layout[:center_x] + (layout[:center_width] / 2)}\" y=\"#{layout[:center_y] + 52}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"24\" font-weight=\"700\" fill=\"#263743\">Team</text>"
+        lines << "  <rect x=\"0\" y=\"0\" width=\"#{layout[:width]}\" height=\"#{layout[:height]}\" fill=\"#{settings[:background_color]}\"/>"
+        lines << "  <rect x=\"#{layout[:center_x]}\" y=\"#{layout[:center_y]}\" width=\"#{layout[:center_width]}\" height=\"#{layout[:center_height]}\" rx=\"32\" fill=\"#{settings[:center_fill]}\" stroke=\"#{settings[:center_stroke]}\" stroke-width=\"2\"/>"
+        lines << "  <text x=\"#{layout[:center_x] + (layout[:center_width] / 2)}\" y=\"#{layout[:center_y] + 52}\" text-anchor=\"middle\" font-family=\"#{settings[:font_family]}\" font-size=\"#{settings[:center_font_size]}\" font-weight=\"700\" fill=\"#{settings[:center_text_color]}\">Team</text>"
 
         layout[:members].each do |member|
-          lines << "  <line x1=\"#{member[:connector_start_x]}\" y1=\"#{member[:connector_y]}\" x2=\"#{member[:connector_end_x]}\" y2=\"#{member[:connector_y]}\" stroke=\"#8aa0af\" stroke-width=\"2\"/>"
+          lines << "  <line x1=\"#{member[:connector_start_x]}\" y1=\"#{member[:connector_y]}\" x2=\"#{member[:connector_end_x]}\" y2=\"#{member[:connector_y]}\" stroke=\"#{settings[:connector_color]}\" stroke-width=\"2\"/>"
         end
 
         layout[:members].each do |member|
-          lines << "  <rect x=\"#{member[:x]}\" y=\"#{member[:y]}\" width=\"#{layout[:member_width]}\" height=\"#{layout[:member_height]}\" rx=\"22\" fill=\"#{member[:fill]}\" stroke=\"#6f8798\" stroke-width=\"2\"/>"
-          lines << "  <text x=\"#{member[:x] + (layout[:member_width] / 2)}\" y=\"#{member[:y] + 28}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"16\" font-weight=\"700\" fill=\"#ffffff\">#{escape_xml(member[:name])}</text>"
-          lines << "  <text x=\"#{member[:x] + (layout[:member_width] / 2)}\" y=\"#{member[:y] + 48}\" text-anchor=\"middle\" font-family=\"Arial, sans-serif\" font-size=\"12\" fill=\"#ffffff\">#{escape_xml(member[:role])}</text>"
+          lines << "  <rect x=\"#{member[:x]}\" y=\"#{member[:y]}\" width=\"#{layout[:member_width]}\" height=\"#{layout[:member_height]}\" rx=\"22\" fill=\"#{member[:fill]}\" stroke=\"#{settings[:member_stroke]}\" stroke-width=\"2\"/>"
+          lines << "  <text x=\"#{member[:x] + (layout[:member_width] / 2)}\" y=\"#{member[:y] + 28}\" text-anchor=\"middle\" font-family=\"#{settings[:font_family]}\" font-size=\"#{settings[:member_name_font_size]}\" font-weight=\"700\" fill=\"#{settings[:member_text_color]}\">#{escape_xml(member[:name])}</text>"
+          lines << "  <text x=\"#{member[:x] + (layout[:member_width] / 2)}\" y=\"#{member[:y] + 48}\" text-anchor=\"middle\" font-family=\"#{settings[:font_family]}\" font-size=\"#{settings[:member_role_font_size]}\" fill=\"#{settings[:member_role_color]}\">#{escape_xml(member[:role])}</text>"
         end
 
         lines << '</svg>'
@@ -128,7 +129,58 @@ module PresentationUtils
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"96\" viewBox=\"0 0 480 96\"><rect width=\"480\" height=\"96\" fill=\"#ffffff\"/><text x=\"24\" y=\"54\" font-family=\"Arial, sans-serif\" font-size=\"16\" fill=\"#991b1b\">#{escape_xml(label)}</text></svg>"
       end
 
-      def radial_team_layout(members)
+      def radial_team_settings(document)
+        {
+          background_color: get_setting(document, 'custom-diagram-background-color', :custom_diagram_background_color,
+                                        '#ffffff'),
+          font_family: get_setting(document, 'custom-diagram-font-family', :custom_diagram_font_family,
+                                   document.attr('base-font-family') || 'Arial, sans-serif'),
+          center_font_size: get_setting(document, 'custom-diagram-center-font-size', :custom_diagram_center_font_size,
+                                        24).to_i,
+          member_name_font_size: get_setting(document, 'custom-diagram-member-name-font-size',
+                                             :custom_diagram_member_name_font_size, 16).to_i,
+          member_role_font_size: get_setting(document, 'custom-diagram-member-role-font-size',
+                                             :custom_diagram_member_role_font_size, 12).to_i,
+          center_fill: get_setting(document, 'custom-diagram-center-fill', :custom_diagram_center_fill, '#eef4f8'),
+          center_stroke: get_setting(document, 'custom-diagram-center-stroke', :custom_diagram_center_stroke,
+                                     '#6f8798'),
+          center_text_color: get_setting(document, 'custom-diagram-center-text-color',
+                                         :custom_diagram_center_text_color, '#263743'),
+          connector_color: get_setting(document, 'custom-diagram-connector-color', :custom_diagram_connector_color,
+                                       '#8aa0af'),
+          member_stroke: get_setting(document, 'custom-diagram-member-stroke', :custom_diagram_member_stroke,
+                                     '#6f8798'),
+          member_text_color: get_setting(document, 'custom-diagram-member-text-color',
+                                         :custom_diagram_member_text_color, '#ffffff'),
+          member_role_color: get_setting(document, 'custom-diagram-member-role-color',
+                                         :custom_diagram_member_role_color, '#ffffff'),
+          member_palette: parse_palette(get_setting(document, 'custom-diagram-member-palette',
+                                                    :custom_diagram_member_palette, '#7890a1,#8aa0af,#6f8798,#9badba,#607888,#a5b5bf'))
+        }
+      end
+
+      def get_setting(document, attr_name, theme_name, default)
+        attr_value = document.attr(attr_name)
+        return attr_value unless attr_value.nil? || attr_value.to_s.empty?
+
+        theme_value = theme[theme_name] if respond_to?(:theme) && theme
+        return normalize_color_value(theme_value, default) unless theme_value.nil?
+
+        default
+      end
+
+      def normalize_color_value(value, default)
+        return value unless default.to_s.start_with?('#')
+
+        value.to_s.start_with?('#') ? value : "##{value}"
+      end
+
+      def parse_palette(value)
+        palette = value.to_s.split(',').map(&:strip).reject(&:empty?)
+        palette.empty? ? ['#7890a1'] : palette
+      end
+
+      def radial_team_layout(members, settings)
         width = 820
         center_width = 260
         center_height = 86
@@ -141,7 +193,7 @@ module PresentationUtils
         height = [420, side_height + (padding * 2)].max
         center_x = (width - center_width) / 2
         center_y = (height - center_height) / 2
-        palette = ['#7890a1', '#8aa0af', '#6f8798', '#9badba', '#607888', '#a5b5bf']
+        palette = settings[:member_palette]
 
         left_members = []
         right_members = []
