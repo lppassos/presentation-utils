@@ -35,7 +35,7 @@ module PresentationUtils
 
     class CustomDiagramBlockProcessor < Asciidoctor::Extensions::BlockProcessor
       use_dsl
-      named :custom_diagram
+      named :'custom-diagram'
       on_context :listing
       parse_content_as :raw
 
