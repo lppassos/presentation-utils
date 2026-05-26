@@ -19,3 +19,67 @@ h1 {
 ul {
   margin: 16px 0 0 24px;
 }
+
+.custom-diagram {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  font-family: "Liberation Sans", "DejaVu Sans", sans-serif;
+}
+
+.custom-diagram-background {
+  fill: #ffffff;
+}
+
+.custom-diagram-connector {
+  stroke: #8aa0af;
+  stroke-width: 2;
+}
+
+.custom-diagram-center-fill {
+  fill: #eef4f8;
+  stroke: #6f8798;
+  stroke-width: 2;
+}
+
+.custom-diagram-center-label {
+  fill: #263743;
+}
+
+.custom-diagram-member-stroke {
+  stroke: #6f8798;
+  stroke-width: 2;
+}
+
+.custom-diagram-member-name,
+.custom-diagram-member-role {
+  fill: #ffffff;
+}
+
+.custom-diagram-member-color-1 .custom-diagram-member-fill {
+  fill: #7890a1;
+}
+
+.custom-diagram-member-color-2 .custom-diagram-member-fill {
+  fill: #8aa0af;
+}
+
+.custom-diagram-member-color-3 .custom-diagram-member-fill {
+  fill: #6f8798;
+}
+
+.custom-diagram-member-color-4 .custom-diagram-member-fill {
+  fill: #9badba;
+}
+
+.custom-diagram-member-color-5 .custom-diagram-member-fill {
+  fill: #607888;
+}
+
+.custom-diagram-member-color-6 .custom-diagram-member-fill {
+  fill: #a5b5bf;
+}
+
+.custom-diagram-unknown text {
+  fill: #991b1b;
+}
