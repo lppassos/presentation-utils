@@ -1,5 +1,6 @@
 require 'asciidoctor'
 require 'asciidoctor/extensions'
+require 'asciidoctor-pdf'
 require 'fileutils'
 require 'pathname'
 require 'securerandom'
