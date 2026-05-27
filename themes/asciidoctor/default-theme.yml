@@ -72,3 +72,17 @@ table:
     stripe-background-color: #f8fafc
 footer:
   border-color: #e2e6ea
+custom-diagram:
+  background-color: #ffffff
+  font-family: Noto Sans
+  center-font-size: 24
+  member-name-font-size: 16
+  member-role-font-size: 12
+  center-fill: #eef4f8
+  center-stroke: #6f8798
+  center-text-color: #263743
+  connector-color: #8aa0af
+  member-stroke: #6f8798
+  member-text-color: #ffffff
+  member-role-color: #ffffff
+  member-palette: #7890a1,#8aa0af,#6f8798,#9badba,#607888,#a5b5bf

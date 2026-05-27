@@ -39,10 +39,12 @@ This document describes the layout of the `presentation-utils` repository and th
 
 - `plugins/asciidoctor/`: Asciidoctor extensions loaded by conversion scripts.
   - `plugins/asciidoctor/advanced-title-page/`: PDF converter override that renders a customisable title page layout.
+  - `plugins/asciidoctor/custom-diagram/`: Block processor and PDF converter override that renders custom diagrams, starting with `radial-team`, as SVG images.
   - `plugins/asciidoctor/gantt-diagram/`: Block processor and PDF converter override that renders Gantt charts as SVG images.
   - `plugins/asciidoctor/last-page-marker/`: PDF converter override that stamps a configurable marker image on the last page.
   - `plugins/asciidoctor/drawio-image/`: TreeProcessor extension that detects image references with a `.drawio` extension, exports them to PNG via headless draw.io (`xvfb-run drawio`), and rewrites the image target to the generated PNG before the PDF converter runs. Conversion is skipped when an up-to-date PNG already exists.
 - `plugins/marp/`: Marp markdown-it plugins and pre-processor modules loaded by the conversion pipeline.
   - `plugins/marp/gantt-diagram/`: markdown-it fence plugin that renders `gantt` code blocks as inline SVG Gantt charts.
+  - `plugins/marp/custom-diagram/`: markdown-it fence plugin that renders `custom-diagram` code blocks as inline SVG custom diagrams, starting with `radial-team`.
   - `plugins/marp/drawio-image/`: Pre-processor module (used by `marp-preprocess.mjs`) that detects standard Markdown image references with a `.drawio` extension, exports each diagram to a transparent PNG under `.imggen/` via headless draw.io (`xvfb-run drawio --transparent`), and rewrites the image src to the generated PNG. Conversion is skipped when an up-to-date PNG already exists.
   - `plugins/marp/mermaid-diagram/`: Pre-processor module (used by `marp-preprocess.mjs`) that detects fenced code blocks tagged `mermaid`, renders each one to a PNG under `.imggen/mermaid-<sha256>.png` via `mmdc` (the Mermaid CLI), and replaces the fenced block with a standard Markdown image reference. The output filename is a SHA-256 hash of the block content, so unchanged diagrams are never re-rendered.

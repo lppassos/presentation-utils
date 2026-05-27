@@ -19,3 +19,58 @@ h1 {
 ul {
   margin: 16px 0 0 24px;
 }
+
+.custom-diagram {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  font-family: "Liberation Sans", "DejaVu Sans", sans-serif;
+}
+
+.custom-diagram-background {
+  fill: #ffffff;
+}
+
+.custom-diagram-connector {
+  stroke: #8aa0af;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.custom-diagram-connector-dot {
+  fill: #8aa0af;
+  stroke: #8aa0af;
+}
+
+.custom-diagram-center-fill {
+  fill: #eef4f8;
+  stroke: #6f8798;
+  stroke-width: 2;
+}
+
+.custom-diagram-center-border {
+  stroke: #6f8798;
+  stroke-width: 4;
+}
+
+.custom-diagram-center-label {
+  fill: #263743;
+}
+
+.custom-diagram-member-stroke {
+  fill: #7890a1;
+  stroke: #6f8798;
+  stroke-width: 2;
+}
+
+.custom-diagram-member-name {
+  fill: #ffffff;
+}
+
+.custom-diagram-member-role {
+  fill: #ffffff;
+}
+
+.custom-diagram-unknown text {
+  fill: #991b1b;
+}
