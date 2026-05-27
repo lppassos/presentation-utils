@@ -4,6 +4,7 @@ const { test } = require("node:test");
 const assert = require("node:assert/strict");
 
 const customDiagram = require("./index.js");
+const radialTeam = require("./radial-team.js");
 
 test("parseCustomDiagramBlock ignores whitespace and detects radial-team", () => {
   const data = customDiagram.parseCustomDiagramBlock("\n  radial-team  \n\n Alice, Architect \n");
@@ -62,14 +63,14 @@ test("renderSvg emits unknown diagram fallback", () => {
 
 test("radialTeamLayout keeps all members without palette metadata", () => {
   const members = Array.from({ length: 7 }, (_, index) => ({ name: `M${index}`, role: "Role" }));
-  const layout = customDiagram.radialTeamLayout(members);
+  const layout = radialTeam.radialTeamLayout(members);
 
   assert.equal(layout.members.length, 7);
   assert.equal(layout.members.some((member) => Object.hasOwn(member, "colorIndex")), false);
 });
 
 test("radialTeamLayout places members in top and bottom rows with centered connector anchors", () => {
-  const layout = customDiagram.radialTeamLayout([
+  const layout = radialTeam.radialTeamLayout([
     { name: "A", role: "R" },
     { name: "B", role: "R" },
     { name: "C", role: "R" },
@@ -98,8 +99,8 @@ test("radialTeamLayout places members in top and bottom rows with centered conne
 });
 
 test("connectorGeometry uses rounded elbows and offsets circles inside anchors", () => {
-  const elbow = customDiagram.connectorGeometry(10, 20, 50, 100);
-  const straight = customDiagram.connectorGeometry(10, 20, 10, 100);
+  const elbow = radialTeam.connectorGeometry(10, 20, 50, 100);
+  const straight = radialTeam.connectorGeometry(10, 20, 10, 100);
 
   assert.equal(elbow.startCircleY, 25);
   assert.equal(elbow.endCircleY, 95);
@@ -107,6 +108,16 @@ test("connectorGeometry uses rounded elbows and offsets circles inside anchors",
   assert.equal(straight.startCircleY, 25);
   assert.equal(straight.endCircleY, 95);
   assert.equal(straight.path, "M 10 25 L 10 95");
+});
+
+test("radial-team module parses and renders directly", () => {
+  const parsed = radialTeam.parse(["title Platform Team", "Alice, Architect"]);
+  const svg = radialTeam.render(parsed);
+
+  assert.equal(parsed.title, "Platform Team");
+  assert.deepEqual(parsed.members, [{ name: "Alice", role: "Architect" }]);
+  assert.match(svg, /Platform Team/);
+  assert.match(svg, /custom-diagram-radial-team/);
 });
 
 test("renderSvg matches Asciidoctor radial structure with classes", () => {
