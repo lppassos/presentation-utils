@@ -34,6 +34,12 @@ ul {
 .custom-diagram-connector {
   stroke: #8aa0af;
   stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.custom-diagram-connector-dot {
+  fill: #8aa0af;
+  stroke: #8aa0af;
 }
 
 .custom-diagram-center-fill {
@@ -42,42 +48,27 @@ ul {
   stroke-width: 2;
 }
 
+.custom-diagram-center-border {
+  stroke: #6f8798;
+  stroke-width: 4;
+}
+
 .custom-diagram-center-label {
   fill: #263743;
 }
 
 .custom-diagram-member-stroke {
+  fill: #7890a1;
   stroke: #6f8798;
   stroke-width: 2;
 }
 
-.custom-diagram-member-name,
-.custom-diagram-member-role {
+.custom-diagram-member-name {
   fill: #ffffff;
 }
 
-.custom-diagram-member-color-1 .custom-diagram-member-fill {
-  fill: #7890a1;
-}
-
-.custom-diagram-member-color-2 .custom-diagram-member-fill {
-  fill: #8aa0af;
-}
-
-.custom-diagram-member-color-3 .custom-diagram-member-fill {
-  fill: #6f8798;
-}
-
-.custom-diagram-member-color-4 .custom-diagram-member-fill {
-  fill: #9badba;
-}
-
-.custom-diagram-member-color-5 .custom-diagram-member-fill {
-  fill: #607888;
-}
-
-.custom-diagram-member-color-6 .custom-diagram-member-fill {
-  fill: #a5b5bf;
+.custom-diagram-member-role {
+  fill: #ffffff;
 }
 
 .custom-diagram-unknown text {
