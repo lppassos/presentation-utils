@@ -29,7 +29,7 @@ function render(data) {
 }
 
 function renderRadialDiagramSvg(title, members) {
-  const layout = radialTeamLayout(members);
+  const layout = radialDiagramLayout(members);
   const lines = [];
   lines.push(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" class="custom-diagram custom-diagram-radial-team">`,
@@ -88,7 +88,6 @@ function renderCenter(layout, title) {
 }
 
 function radialDiagramLayout(members) {
-  const minWidth = 820;
   const centerWidth = 260;
   const centerHeight = 66;
   const memberWidth = 190;
@@ -96,12 +95,12 @@ function radialDiagramLayout(members) {
   const columnGap = 24;
   const centerGap = 52;
   const centerConnectorSpan = 90;
-  const padding = 24;
+  const padding = 10;
   const topCount = Math.ceil(members.length / 2);
   const bottomCount = members.length - topCount;
   const maxRowCount = Math.max(topCount, bottomCount, 1);
   const rowWidth = maxRowCount * memberWidth + (maxRowCount - 1) * columnGap;
-  const width = Math.max(minWidth, rowWidth + padding * 2);
+  const width = Math.max(centerWidth, rowWidth) + padding * 2;
   const height = 420;
   const centerX = (width - centerWidth) / 2;
   const centerY = (height - centerHeight) / 2;
@@ -118,7 +117,10 @@ function radialDiagramLayout(members) {
   ];
 
   for (const [rowMembers, y, centerAnchorY, isTopRow] of rows) {
-    const currentRowWidth = rowMembers.length === 0 ? 0 : rowMembers.length * memberWidth + (rowMembers.length - 1) * columnGap;
+    const currentRowWidth =
+      rowMembers.length === 0
+        ? 0
+        : rowMembers.length * memberWidth + (rowMembers.length - 1) * columnGap;
     const startX = (width - currentRowWidth) / 2;
     rowMembers.forEach((member, index) => {
       const x = startX + index * (memberWidth + columnGap);
@@ -127,7 +129,13 @@ function radialDiagramLayout(members) {
         y,
         connectorStartX: x + memberWidth / 2,
         connectorStartY: isTopRow ? y + memberHeight + 5 : y - 5,
-        connectorEndX: centerConnectorX(centerX, centerWidth, centerConnectorSpan, rowMembers.length, index),
+        connectorEndX: centerConnectorX(
+          centerX,
+          centerWidth,
+          centerConnectorSpan,
+          rowMembers.length,
+          index,
+        ),
         connectorEndY: centerAnchorY,
         name: member.name,
         role: member.role,
@@ -136,7 +144,17 @@ function radialDiagramLayout(members) {
   }
 
   placed.sort((a, b) => a.y - b.y || a.x - b.x);
-  return { width, height, centerX, centerY, centerWidth, centerHeight, memberWidth, memberHeight, members: placed };
+  return {
+    width,
+    height,
+    centerX,
+    centerY,
+    centerWidth,
+    centerHeight,
+    memberWidth,
+    memberHeight,
+    members: placed,
+  };
 }
 
 function centerConnectorX(centerX, centerWidth, span, count, index) {
@@ -149,8 +167,10 @@ function centerConnectorX(centerX, centerWidth, span, count, index) {
 function connectorGeometry(startX, startY, endX, endY) {
   const radius = 5;
   const midY = (startY + endY) / 2;
-  const startCircleY = startY + Math.sign(midY - startY || endY - startY || 1) * radius;
-  const endCircleY = endY + Math.sign(midY - endY || startY - endY || -1) * radius;
+  const startCircleY =
+    startY + Math.sign(midY - startY || endY - startY || 1) * radius;
+  const endCircleY =
+    endY + Math.sign(midY - endY || startY - endY || -1) * radius;
 
   if (startX === endX) {
     return {
@@ -207,7 +227,10 @@ function moveToward(from, to, distanceAmount) {
   if (totalDistance === 0) return [from[0], from[1]];
 
   const ratio = distanceAmount / totalDistance;
-  return [from[0] + (to[0] - from[0]) * ratio, from[1] + (to[1] - from[1]) * ratio];
+  return [
+    from[0] + (to[0] - from[0]) * ratio,
+    from[1] + (to[1] - from[1]) * ratio,
+  ];
 }
 
 function distance(pointA, pointB) {
