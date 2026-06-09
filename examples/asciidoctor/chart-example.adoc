@@ -1,0 +1,24 @@
+:doctype: book
+:toc: left
+:imagesdir: .
+
+= Example Chart Diagram
+
+== Revenue Trend
+
+This example shows how to include a chart block in Asciidoctor.
+
+[chart, target=revenue-trend.svg]
+----
+type: line
+title: Revenue Trend
+x_axis_title: Month
+y_axis_title: Revenue
+legend: top-right
+data: |
+  month,actual,forecast
+  Jan,12,10
+  Feb,18,16
+  Mar,15,18
+  Apr,22,20
+----

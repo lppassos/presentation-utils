@@ -72,6 +72,21 @@ table:
     stripe-background-color: #f8fafc
 footer:
   border-color: #e2e6ea
+chart-diagram:
+  background-color: #ffffff
+  font-family: Noto Sans
+  font-size: 12
+  title-font-size: 18
+  axis-title-font-size: 13
+  tick-font-size: 11
+  text-color: #1b1b1b
+  title-color: #101010
+  axis-color: #475569
+  grid-color: #d8d8d8
+  legend-text-color: #1b1b1b
+  legend-border-color: #94a3b8
+  legend-background-color: #ffffff
+  series-palette: #4b8bbf,#c2410c,#2b7a78,#7c3aed,#ca8a04,#be185d
 custom-diagram:
   background-color: #ffffff
   font-family: Noto Sans
