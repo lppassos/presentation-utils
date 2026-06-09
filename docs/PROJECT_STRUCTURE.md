@@ -39,6 +39,7 @@ This document describes the layout of the `presentation-utils` repository and th
 
 - `plugins/asciidoctor/`: Asciidoctor extensions loaded by conversion scripts.
   - `plugins/asciidoctor/advanced-title-page/`: PDF converter override that renders a customisable title page layout.
+  - `plugins/asciidoctor/chart-diagram/`: Block processor and PDF converter override that renders chart blocks as SVG images.
   - `plugins/asciidoctor/custom-diagram/`: Block processor and PDF converter override that renders custom diagrams, starting with `radial-team`, as SVG images.
   - `plugins/asciidoctor/gantt-diagram/`: Block processor and PDF converter override that renders Gantt charts as SVG images.
   - `plugins/asciidoctor/last-page-marker/`: PDF converter override that stamps a configurable marker image on the last page.
