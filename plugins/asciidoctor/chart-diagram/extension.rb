@@ -61,6 +61,35 @@ module PresentationUtils
           raise Error, 'series must be a YAML list of column names'
         end
 
+        override_series = config['override_series']
+        if override_series.nil?
+          normalized_override_series = []
+        elsif override_series.is_a?(Array)
+          normalized_override_series = override_series.map { |entry| normalize_series_override(entry) }
+          if normalized_override_series.empty?
+            raise Error,
+                  'override_series must include at least one series override when provided'
+          end
+
+          override_names = normalized_override_series.map { |entry| entry['name'] }
+          raise Error, 'override_series names must be unique' unless override_names.uniq.length == override_names.length
+        else
+          raise Error, 'override_series must be a YAML list of objects'
+        end
+
+        if type == 'bar' && normalized_override_series.any? { |entry| entry['axis'] == 'secondary' }
+          raise Error, 'override_series with axis secondary is not supported for bar charts'
+        end
+
+        if type == 'bar' && normalized_override_series.any? { |entry| entry['type'] && entry['type'] != 'bar' }
+          raise Error, 'override_series type overrides are not supported for bar charts'
+        end
+
+        if type != 'bar' && normalized_override_series.any? { |entry| entry['type'] == 'bar' }
+          raise Error, 'override_series type bar is only supported for bar charts'
+        end
+
+        secondary_axis = normalize_secondary_axis(config['secondary_axis'])
         category_axis_padding = normalize_boolean(config['category_axis_padding'], 'category_axis_padding')
 
         {
@@ -68,7 +97,9 @@ module PresentationUtils
           'title' => string_or_nil(config['title']),
           'x_axis_title' => string_or_nil(config['x_axis_title']),
           'y_axis_title' => string_or_nil(config['y_axis_title']),
+          'secondary_axis' => secondary_axis,
           'series' => normalized_series,
+          'override_series' => normalized_override_series,
           'legend' => legend,
           'category_axis_padding' => category_axis_padding,
           'data' => has_inline ? config['data'].to_s : nil,
@@ -120,10 +151,33 @@ module PresentationUtils
         missing_series = selected_series - headers.drop(1)
         raise Error, "unknown series column(s): #{missing_series.join(', ')}" unless missing_series.empty?
 
+        override_series = config['override_series'] || []
+        override_names = override_series.map { |entry| entry['name'] }
+        missing_override_series = override_names - selected_series
+        unless missing_override_series.empty?
+          raise Error,
+                "unknown override series column(s): #{missing_override_series.join(', ')}"
+        end
+
+        secondary_series_count = override_series.count { |entry| entry['axis'] == 'secondary' }
+        if !override_series.empty? && secondary_series_count == selected_series.length
+          raise Error,
+                'override_series must leave at least one primary-axis series'
+        end
+
+        override_map = override_series.each_with_object({}) { |entry, memo| memo[entry['name']] = entry }
+
         series_indexes = selected_series.map { |name| headers.index(name) }
         categories = []
         series = selected_series.map do |name|
-          { 'name' => name, 'values' => [] }
+          override = override_map[name] || {}
+          {
+            'name' => name,
+            'title' => override['title'] || name,
+            'axis' => override['axis'] || 'primary',
+            'type' => override['type'],
+            'values' => []
+          }
         end
 
         data_rows.each do |row|
@@ -139,15 +193,18 @@ module PresentationUtils
           end
         end
 
-        all_values = series.flat_map { |entry| entry['values'] }
+        primary_values = series.select { |entry| entry['axis'] == 'primary' }.flat_map { |entry| entry['values'] }
+        secondary_values = series.select { |entry| entry['axis'] == 'secondary' }.flat_map { |entry| entry['values'] }
         {
           'category_header' => headers.first,
           'categories' => categories,
           'series' => series,
           'series_count' => series.length,
           'row_count' => categories.length,
-          'min_value' => all_values.min.to_f,
-          'max_value' => all_values.max.to_f
+          'min_value' => primary_values.min.to_f,
+          'max_value' => primary_values.max.to_f,
+          'secondary_min_value' => secondary_values.min&.to_f,
+          'secondary_max_value' => secondary_values.max&.to_f
         }
       rescue CSV::MalformedCSVError => e
         raise Error, "invalid chart CSV: #{e.message}"
@@ -167,6 +224,52 @@ module PresentationUtils
         return false if normalized == 'false'
 
         raise Error, "#{key} must be true or false"
+      end
+
+      def normalize_series_override(entry)
+        raise Error, 'override_series entries must be YAML objects' unless entry.is_a?(Hash)
+
+        normalized = entry.each_with_object({}) { |(key, value), memo| memo[key.to_s] = value }
+        name = normalized['name'].to_s.strip
+        raise Error, 'override_series entries must define a name' if name.empty?
+
+        axis = normalized['axis'].to_s.strip
+        axis = 'primary' if axis.empty?
+        raise Error, "unsupported override_series axis: #{axis}" unless %w[primary secondary].include?(axis)
+
+        {
+          'name' => name,
+          'title' => string_or_nil(normalized['title']),
+          'axis' => axis,
+          'type' => normalize_series_type(normalized['type'])
+        }
+      end
+
+      def normalize_series_type(value)
+        return nil if value.nil?
+
+        type = value.to_s.strip
+        return nil if type.empty?
+
+        raise Error, "unsupported override_series type: #{type}" unless SUPPORTED_TYPES.include?(type)
+
+        type
+      end
+
+      def normalize_secondary_axis(value)
+        return nil if value.nil?
+
+        raise Error, 'secondary_axis must be a YAML object' unless value.is_a?(Hash)
+
+        normalized = value.each_with_object({}) { |(key, entry_value), memo| memo[key.to_s] = entry_value }
+        format = normalized['format'].to_s.strip
+        format = '#' if format.empty?
+        raise Error, "unsupported secondary_axis format: #{format}" unless ['#', '%'].include?(format)
+
+        {
+          'title' => string_or_nil(normalized['title']),
+          'format' => format
+        }
       end
 
       def blank?(value)
@@ -245,12 +348,14 @@ module PresentationUtils
         title_height = data['title'] ? 38 : 10
         bottom_axis_title_present = data['type'] == 'bar' ? !!data['y_axis_title'] : !!data['x_axis_title']
         bottom_axis_title_height = bottom_axis_title_present ? 28 : 8
+        has_secondary_axis = !dataset['secondary_min_value'].nil? && !dataset['secondary_max_value'].nil?
         left_axis_title_width = if data['type'] == 'bar'
                                   data['x_axis_title'] ? 36 : 0
                                 else
                                   (data['y_axis_title'] ? 36 : 0)
                                 end
-        right_padding = 24
+        right_axis_title_width = has_secondary_axis && data['type'] != 'bar' && secondary_axis_title(data) ? 36 : 0
+        right_padding = has_secondary_axis && data['type'] != 'bar' ? 92 + right_axis_title_width : 24
         top_padding = 18
         plot_x = 92 + left_axis_title_width
         plot_y = top_padding + title_height
@@ -270,6 +375,10 @@ module PresentationUtils
         height = plot_y + plot_height + 52 + bottom_axis_title_height
 
         ticks = nice_ticks(dataset['min_value'], dataset['max_value'])
+        secondary_ticks = if has_secondary_axis
+                            nice_ticks(dataset['secondary_min_value'],
+                                       dataset['secondary_max_value'])
+                          end
         {
           width: width,
           height: height,
@@ -281,12 +390,17 @@ module PresentationUtils
           ticks: ticks,
           axis_min: ticks.min.to_f,
           axis_max: ticks.max.to_f,
+          secondary_ticks: secondary_ticks,
+          secondary_axis_min: secondary_ticks&.min&.to_f,
+          secondary_axis_max: secondary_ticks&.max&.to_f,
+          has_secondary_axis: has_secondary_axis,
           category_axis_padding: data['category_axis_padding'],
           bottom_axis_title_present: bottom_axis_title_present,
           bottom_legend_gap: bottom_legend_gap,
           legend_box: legend_box(data['legend'], legend_size, plot_x, plot_y, plot_width, plot_height, width, height,
                                  bottom_axis_title_present, bottom_legend_gap),
-          left_axis_title_width: left_axis_title_width
+          left_axis_title_width: left_axis_title_width,
+          right_axis_title_width: right_axis_title_width
         }
       end
 
@@ -363,6 +477,16 @@ module PresentationUtils
                           settings[:text_color], anchor: 'end')
           end
 
+          if layout[:has_secondary_axis]
+            right_axis_x = plot_x + plot_width
+            lines << %(<line x1="#{right_axis_x}" y1="#{plot_y}" x2="#{right_axis_x}" y2="#{plot_y + plot_height}" stroke="#{settings[:axis_color]}" stroke-width="1.5"/>)
+            layout[:secondary_ticks].each do |tick|
+              y = value_to_y(tick, layout, dataset, axis: 'secondary')
+              lines << text(right_axis_x + 8, y + 4, tick_label(tick, secondary_axis_format(data)), settings[:font_family], settings[:tick_font_size],
+                            settings[:text_color], anchor: 'start')
+            end
+          end
+
           if has_negatives
             zero_y = value_to_y(0.0, layout, dataset)
             lines << %(<line x1="#{plot_x}" y1="#{format_number(zero_y)}" x2="#{plot_x + plot_width}" y2="#{format_number(zero_y)}" stroke="#{settings[:axis_color]}" stroke-width="1.5"/>)
@@ -380,68 +504,82 @@ module PresentationUtils
 
       def render_series(data, dataset, layout, settings)
         case data['type']
-        when 'line' then render_line_series(dataset, layout, settings)
-        when 'area' then render_area_series(dataset, layout, settings)
-        when 'column' then render_column_series(dataset, layout, settings)
         when 'bar' then render_bar_series(dataset, layout, settings)
-        else []
+        else
+          render_mixed_vertical_series(data, dataset, layout, settings)
         end
       end
 
-      def render_line_series(dataset, layout, settings)
-        dataset['series'].each_with_index.flat_map do |series, idx|
-          color = palette_color(settings, idx)
-          points = series['values'].each_with_index.map do |value, category_index|
-            [category_center(category_index, dataset, layout), value_to_y(value, layout, dataset)]
+      def render_mixed_vertical_series(data, dataset, layout, settings)
+        %w[column area line].flat_map do |series_type|
+          dataset['series'].each_with_index.filter_map do |series, idx|
+            render_series_entry(data, dataset, layout, settings, series, idx) if resolved_series_type(data,
+                                                                                                      series) == series_type
           end
-          path = points.each_with_index.map do |(x, y), i|
-            "#{i.zero? ? 'M' : 'L'} #{format_number(x)} #{format_number(y)}"
-          end.join(' ')
-          lines = []
-          lines << %(<path d="#{path}" fill="none" stroke="#{color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>)
-          points.each do |x, y|
-            lines << %(<circle cx="#{format_number(x)}" cy="#{format_number(y)}" r="4" fill="#{color}"/>)
-          end
-          lines
         end
       end
 
-      def render_area_series(dataset, layout, settings)
-        zero_y = value_to_y(0.0, layout, dataset)
-        dataset['series'].each_with_index.flat_map do |series, idx|
-          color = palette_color(settings, idx)
-          points = series['values'].each_with_index.map do |value, category_index|
-            [category_center(category_index, dataset, layout), value_to_y(value, layout, dataset)]
-          end
-          line_d = points.each_with_index.map do |(x, y), i|
-            "#{i.zero? ? 'M' : 'L'} #{format_number(x)} #{format_number(y)}"
-          end.join(' ')
-          first_x = format_number(points.first[0])
-          last_x  = format_number(points.last[0])
-          fill_d  = "#{line_d} L #{last_x} #{format_number(zero_y)} L #{first_x} #{format_number(zero_y)} Z"
-          [
-            %(<path d="#{fill_d}" fill="#{color}" fill-opacity="0.18" stroke="none"/>),
-            %(<path d="#{line_d}" fill="none" stroke="#{color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>)
-          ]
+      def render_series_entry(data, dataset, layout, settings, series, idx)
+        case resolved_series_type(data, series)
+        when 'line' then render_line_series_entry(dataset, layout, settings, series, idx)
+        when 'area' then render_area_series_entry(dataset, layout, settings, series, idx)
+        when 'column' then render_column_series_entry(data, dataset, layout, settings, series, idx)
         end
       end
 
-      def render_column_series(dataset, layout, settings)
+      def render_line_series_entry(dataset, layout, settings, series, idx)
+        color = palette_color(settings, idx)
+        points = series['values'].each_with_index.map do |value, category_index|
+          [category_center(category_index, dataset, layout), value_to_y(value, layout, dataset, axis: series['axis'])]
+        end
+        path = points.each_with_index.map do |(x, y), i|
+          "#{i.zero? ? 'M' : 'L'} #{format_number(x)} #{format_number(y)}"
+        end.join(' ')
+        lines = []
+        lines << %(<path d="#{path}" fill="none" stroke="#{color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>)
+        points.each do |x, y|
+          lines << %(<circle cx="#{format_number(x)}" cy="#{format_number(y)}" r="4" fill="#{color}"/>)
+        end
+        lines
+      end
+
+      def render_area_series_entry(dataset, layout, settings, series, idx)
+        color = palette_color(settings, idx)
+        zero_y = value_to_y(0.0, layout, dataset, axis: series['axis'])
+        points = series['values'].each_with_index.map do |value, category_index|
+          [category_center(category_index, dataset, layout), value_to_y(value, layout, dataset, axis: series['axis'])]
+        end
+        line_d = points.each_with_index.map do |(x, y), i|
+          "#{i.zero? ? 'M' : 'L'} #{format_number(x)} #{format_number(y)}"
+        end.join(' ')
+        first_x = format_number(points.first[0])
+        last_x  = format_number(points.last[0])
+        fill_d  = "#{line_d} L #{last_x} #{format_number(zero_y)} L #{first_x} #{format_number(zero_y)} Z"
+        [
+          %(<path d="#{fill_d}" fill="#{color}" fill-opacity="0.18" stroke="none"/>),
+          %(<path d="#{line_d}" fill="none" stroke="#{color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>)
+        ]
+      end
+
+      def render_column_series_entry(data, dataset, layout, settings, series, series_idx)
+        column_series_indexes = dataset['series'].each_index.select do |index|
+          resolved_series_type(data, dataset['series'][index]) == 'column'
+        end
         category_width = layout[:plot_width].to_f / dataset['row_count']
         inner_gap = 6.0
         group_width = [category_width - 16.0, 20.0].max
-        bar_width = [(group_width - (inner_gap * (dataset['series_count'] - 1))) / dataset['series_count'], 6.0].max
-        zero_y = value_to_y(0.0, layout, dataset)
+        bar_width = [(group_width - (inner_gap * (column_series_indexes.length - 1))) / column_series_indexes.length,
+                     6.0].max
+        column_position = column_series_indexes.index(series_idx)
+        color = palette_color(settings, series_idx)
+        zero_y = value_to_y(0.0, layout, dataset, axis: series['axis'])
 
-        dataset['series'].each_with_index.flat_map do |series, series_idx|
-          color = palette_color(settings, series_idx)
-          series['values'].each_with_index.map do |value, cat_idx|
-            x = layout[:plot_x] + (cat_idx * category_width) + ((category_width - group_width) / 2.0) + (series_idx * (bar_width + inner_gap))
-            y = value_to_y(value, layout, dataset)
-            rect_y = [y, zero_y].min
-            h = [(zero_y - y).abs, 1.0].max
-            %(<rect x="#{format_number(x)}" y="#{format_number(rect_y)}" width="#{format_number(bar_width)}" height="#{format_number(h)}" rx="2" fill="#{color}"/>)
-          end
+        series['values'].each_with_index.map do |value, cat_idx|
+          x = layout[:plot_x] + (cat_idx * category_width) + ((category_width - group_width) / 2.0) + (column_position * (bar_width + inner_gap))
+          y = value_to_y(value, layout, dataset, axis: series['axis'])
+          rect_y = [y, zero_y].min
+          h = [(zero_y - y).abs, 1.0].max
+          %(<rect x="#{format_number(x)}" y="#{format_number(rect_y)}" width="#{format_number(bar_width)}" height="#{format_number(h)}" rx="2" fill="#{color}"/>)
         end
       end
 
@@ -478,6 +616,12 @@ module PresentationUtils
           lines << %(<text x="#{format_number(layout[:plot_x] - 58)}" y="#{format_number(layout[:plot_y] + (layout[:plot_height] / 2.0))}" text-anchor="middle" font-family="#{escape_xml(settings[:font_family])}" font-size="#{settings[:axis_title_font_size]}" fill="#{settings[:text_color]}" transform="rotate(-90 #{format_number(layout[:plot_x] - 58)} #{format_number(layout[:plot_y] + (layout[:plot_height] / 2.0))})">#{escape_xml(axis_title_value)}</text>)
         end
 
+        if layout[:has_secondary_axis] && data['type'] != 'bar' && secondary_axis_title(data)
+          x = layout[:plot_x] + layout[:plot_width] + 58
+          y = layout[:plot_y] + (layout[:plot_height] / 2.0)
+          lines << %(<text x="#{format_number(x)}" y="#{format_number(y)}" text-anchor="middle" font-family="#{escape_xml(settings[:font_family])}" font-size="#{settings[:axis_title_font_size]}" fill="#{settings[:text_color]}" transform="rotate(90 #{format_number(x)} #{format_number(y)})">#{escape_xml(secondary_axis_title(data))}</text>)
+        end
+
         category_axis_title = data['type'] == 'bar' ? data['y_axis_title'] : data['x_axis_title']
         if category_axis_title
           lines << text(plot_center_x, plot_bottom_y + 42, category_axis_title, settings[:font_family],
@@ -495,16 +639,17 @@ module PresentationUtils
         dataset['series'].each_with_index do |series, index|
           y = box[:y] + 18 + (index * (settings[:tick_font_size] + 10))
           color = palette_color(settings, index)
-          if %w[line area].include?(chart_type)
+          series_type = resolved_series_type({ 'type' => chart_type }, series)
+          if %w[line area].include?(series_type)
             lines << %(<line x1="#{format_number(box[:x] + 12)}" y1="#{format_number(y - 4)}" x2="#{format_number(box[:x] + 32)}" y2="#{format_number(y - 4)}" stroke="#{color}" stroke-width="3" stroke-linecap="round"/>)
             lines << %(<circle cx="#{format_number(box[:x] + 22)}" cy="#{format_number(y - 4)}" r="3" fill="#{color}"/>)
-            if chart_type == 'area'
+            if series_type == 'area'
               lines << %(<rect x="#{format_number(box[:x] + 12)}" y="#{format_number(y - 1)}" width="20" height="6" fill="#{color}" fill-opacity="0.18" stroke="none"/>)
             end
           else
             lines << %(<rect x="#{format_number(box[:x] + 12)}" y="#{format_number(y - 10)}" width="18" height="10" rx="2" fill="#{color}"/>)
           end
-          lines << text(box[:x] + 38, y, series['name'], settings[:font_family], settings[:tick_font_size],
+          lines << text(box[:x] + 38, y, series['title'] || series['name'], settings[:font_family], settings[:tick_font_size],
                         settings[:legend_text_color])
         end
         lines
@@ -527,16 +672,25 @@ module PresentationUtils
         layout[:plot_y] + (index * category_height) + (category_height / 2.0)
       end
 
-      def value_to_y(value, layout, dataset)
-        range = [layout[:axis_max].to_f - layout[:axis_min].to_f,
-                 dataset['max_value'].to_f - dataset['min_value'].to_f, 1.0].max
-        layout[:plot_y] + layout[:plot_height] - (((value.to_f - layout[:axis_min].to_f) / range) * layout[:plot_height])
+      def value_to_y(value, layout, dataset, axis: 'primary')
+        axis_min, axis_max, min_value, max_value = axis_scale(axis, layout, dataset)
+        range = [axis_max - axis_min, max_value - min_value, 1.0].max
+        layout[:plot_y] + layout[:plot_height] - (((value.to_f - axis_min) / range) * layout[:plot_height])
       end
 
       def value_to_x(value, layout, dataset)
         range = [layout[:axis_max].to_f - layout[:axis_min].to_f,
                  dataset['max_value'].to_f - dataset['min_value'].to_f, 1.0].max
         layout[:plot_x] + (((value.to_f - layout[:axis_min].to_f) / range) * layout[:plot_width])
+      end
+
+      def axis_scale(axis, layout, dataset)
+        if axis.to_s == 'secondary'
+          [layout[:secondary_axis_min].to_f, layout[:secondary_axis_max].to_f,
+           dataset['secondary_min_value'].to_f, dataset['secondary_max_value'].to_f]
+        else
+          [layout[:axis_min].to_f, layout[:axis_max].to_f, dataset['min_value'].to_f, dataset['max_value'].to_f]
+        end
       end
 
       def nice_ticks(min_value, max_value)
@@ -564,8 +718,27 @@ module PresentationUtils
         ticks
       end
 
-      def tick_label(value)
+      def tick_label(value, axis_format = '#')
+        return percentage_tick_label(value) if axis_format == '%'
+
         value == value.to_i ? value.to_i.to_s : format('%.2f', value).sub(/0+\z/, '').sub(/\.\z/, '')
+      end
+
+      def percentage_tick_label(value)
+        scaled = value.to_f * 100.0
+        "#{tick_label(scaled, '#')}%"
+      end
+
+      def secondary_axis_title(data)
+        data['secondary_axis'] && data['secondary_axis']['title']
+      end
+
+      def secondary_axis_format(data)
+        data['secondary_axis'] && data['secondary_axis']['format'] ? data['secondary_axis']['format'] : '#'
+      end
+
+      def resolved_series_type(data, series)
+        series['type'] || data['type']
       end
 
       def text(x, y, content, font_family, font_size, fill, anchor: 'start', weight: nil)

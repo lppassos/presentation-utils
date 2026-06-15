@@ -108,6 +108,51 @@ class TestChartParser < Minitest::Test
     assert_equal [10.0, 16.0], data['dataset']['series'][0]['values']
   end
 
+  def test_parses_override_series_configuration
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+    data = chart_parser.parse(<<~YAML, document)
+      type: line
+      secondary_axis:
+        title: Variation
+        format: "%"
+      override_series:
+        - name: variation
+          title: Variation %
+          axis: secondary
+          type: column
+      data: |
+        month,actual,variation
+        Jan,12,5
+        Feb,18,12
+    YAML
+
+    assert_equal 'Variation', data['secondary_axis']['title']
+    assert_equal '%', data['secondary_axis']['format']
+    assert_equal(%w[primary secondary], data['dataset']['series'].map { |entry| entry['axis'] })
+    assert_equal(['actual', 'Variation %'], data['dataset']['series'].map { |entry| entry['title'] })
+    assert_equal([nil, 'column'], data['dataset']['series'].map { |entry| entry['type'] })
+    assert_equal 5.0, data['dataset']['secondary_min_value']
+    assert_equal 12.0, data['dataset']['secondary_max_value']
+  end
+
+  def test_defaults_secondary_axis_format_to_number
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+    data = chart_parser.parse(<<~YAML, document)
+      type: line
+      secondary_axis:
+        title: Variation
+      override_series:
+        - name: variation
+          axis: secondary
+      data: |
+        month,actual,variation
+        Jan,12,0.05
+        Feb,18,0.12
+    YAML
+
+    assert_equal '#', data['secondary_axis']['format']
+  end
+
   def test_rejects_invalid_yaml
     document = FakeChartDocument.new('docdir' => Dir.pwd)
 
@@ -183,6 +228,181 @@ class TestChartParser < Minitest::Test
     end
 
     assert_equal 'category_axis_padding must be true or false', error.message
+  end
+
+  def test_rejects_unknown_override_series_selection
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: line
+        override_series:
+          - name: variation
+            axis: secondary
+        data: |
+          month,actual,forecast
+          Jan,12,10
+      YAML
+    end
+
+    assert_equal 'unknown override series column(s): variation', error.message
+  end
+
+  def test_rejects_override_series_without_primary_series
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: line
+        override_series:
+          - name: actual
+            axis: secondary
+        series:
+          - actual
+        data: |
+          month,actual
+          Jan,12
+      YAML
+    end
+
+    assert_equal 'override_series must leave at least one primary-axis series', error.message
+  end
+
+  def test_rejects_secondary_override_for_bar_charts
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: bar
+        override_series:
+          - name: actual
+            axis: secondary
+        data: |
+          month,actual,forecast
+          Jan,12,10
+      YAML
+    end
+
+    assert_equal 'override_series with axis secondary is not supported for bar charts', error.message
+  end
+
+  def test_rejects_invalid_override_series_axis
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: line
+        override_series:
+          - name: actual
+            axis: tertiary
+        data: |
+          month,actual
+          Jan,12
+      YAML
+    end
+
+    assert_equal 'unsupported override_series axis: tertiary', error.message
+  end
+
+  def test_rejects_invalid_override_series_type
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: line
+        override_series:
+          - name: actual
+            type: scatter
+        data: |
+          month,actual
+          Jan,12
+      YAML
+    end
+
+    assert_equal 'unsupported override_series type: scatter', error.message
+  end
+
+  def test_rejects_bar_override_type_on_vertical_chart
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: line
+        override_series:
+          - name: actual
+            type: bar
+        data: |
+          month,actual
+          Jan,12
+      YAML
+    end
+
+    assert_equal 'override_series type bar is only supported for bar charts', error.message
+  end
+
+  def test_rejects_duplicate_override_series_names
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: line
+        override_series:
+          - name: actual
+          - name: actual
+            title: Revenue
+        data: |
+          month,actual
+          Jan,12
+      YAML
+    end
+
+    assert_equal 'override_series names must be unique', error.message
+  end
+
+  def test_rejects_type_overrides_for_bar_charts
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: bar
+        override_series:
+          - name: actual
+            type: line
+        data: |
+          month,actual
+          Jan,12
+      YAML
+    end
+
+    assert_equal 'override_series type overrides are not supported for bar charts', error.message
+  end
+
+  def test_rejects_invalid_secondary_axis_format
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse(<<~YAML, document)
+        type: line
+        secondary_axis:
+          title: Variation
+          format: currency
+        data: |
+          month,actual
+          Jan,12
+      YAML
+    end
+
+    assert_equal 'unsupported secondary_axis format: currency', error.message
+  end
+
+  def test_rejects_non_object_secondary_axis
+    document = FakeChartDocument.new('docdir' => Dir.pwd)
+
+    error = assert_raises(PresentationUtils::ChartDiagram::Error) do
+      chart_parser.parse("type: line\nsecondary_axis: variation\ndata: |\n  month,actual\n  Jan,12\n", document)
+    end
+
+    assert_equal 'secondary_axis must be a YAML object', error.message
   end
 end
 
@@ -367,6 +587,64 @@ class TestChartRenderer < Minitest::Test
     assert_operator svg.scan(/fill-opacity="0\.18"/).length, :==, 2
   end
 
+  def test_renders_secondary_axis_on_right_for_vertical_charts
+    dataset = {
+      'category_header' => 'month',
+      'categories' => %w[Jan Feb Mar],
+      'series' => [
+        { 'name' => 'actual', 'title' => 'Revenue', 'axis' => 'primary', 'values' => [120.0, 180.0, 150.0] },
+        { 'name' => 'variation', 'title' => 'Variation %', 'axis' => 'secondary', 'values' => [5.0, 12.0, 8.0] }
+      ],
+      'series_count' => 2,
+      'row_count' => 3,
+      'min_value' => 120.0,
+      'max_value' => 180.0,
+      'secondary_min_value' => 5.0,
+      'secondary_max_value' => 12.0
+    }
+
+    svg = chart_renderer.render(@document, {
+                                  'type' => 'line',
+                                  'legend' => 'none',
+                                  'y_axis_title' => 'Revenue',
+                                  'secondary_axis' => { 'title' => 'Variation', 'format' => '%' },
+                                  'dataset' => dataset
+                                })
+
+    assert_includes svg, '>Variation<'
+    assert_includes svg, '<line x1="668" y1="28" x2="668" y2="308" stroke="#475569" stroke-width="1.5"/>'
+    assert_includes svg,
+                    '<text x="676" y="312" text-anchor="start" font-family="Test Sans" font-size="11.0" fill="#1b1b1b">0%</text>'
+    assert_includes svg,
+                    '<text x="676" y="32" text-anchor="start" font-family="Test Sans" font-size="11.0" fill="#1b1b1b">1500%</text>'
+  end
+
+  def test_renders_mixed_line_and_column_series
+    dataset = {
+      'category_header' => 'month',
+      'categories' => %w[Jan Feb Mar],
+      'series' => [
+        { 'name' => 'actual', 'title' => 'Revenue', 'axis' => 'primary', 'values' => [12.0, 18.0, 15.0] },
+        { 'name' => 'target', 'title' => 'Target', 'axis' => 'primary', 'type' => 'column',
+          'values' => [10.0, 16.0, 17.0] }
+      ],
+      'series_count' => 2,
+      'row_count' => 3,
+      'min_value' => 10.0,
+      'max_value' => 18.0
+    }
+
+    svg = chart_renderer.render(@document, {
+                                  'type' => 'line',
+                                  'legend' => 'none',
+                                  'dataset' => dataset
+                                })
+
+    assert_includes svg, '<path d="M '
+    assert_includes svg, '<circle '
+    assert_operator svg.scan(%r{<rect [^>]*rx="2" [^>]*fill="#c2410c"[^>]*/>}).length, :==, 3
+  end
+
   def test_area_fill_closes_back_to_zero_baseline
     svg = chart_renderer.render(@document, {
                                   'type' => 'area',
@@ -378,16 +656,29 @@ class TestChartRenderer < Minitest::Test
   end
 
   def test_area_legend_shows_line_and_fill_sample
+    dataset = {
+      'category_header' => 'month',
+      'categories' => %w[Jan Feb Mar],
+      'series' => [
+        { 'name' => 'actual', 'title' => 'Revenue', 'axis' => 'primary', 'values' => [12.0, 18.0, 15.0] },
+        { 'name' => 'forecast', 'title' => 'Forecast', 'axis' => 'primary', 'values' => [10.0, 16.0, 18.0] }
+      ],
+      'series_count' => 2,
+      'row_count' => 3,
+      'min_value' => 10.0,
+      'max_value' => 18.0
+    }
+
     svg = chart_renderer.render(@document, {
                                   'type' => 'area',
                                   'legend' => 'right',
-                                  'dataset' => @dataset
+                                  'dataset' => dataset
                                 })
 
     assert_includes svg, '<line x1='
     assert_includes svg, 'fill-opacity="0.18"'
-    assert_includes svg, '>actual<'
-    assert_includes svg, '>forecast<'
+    assert_includes svg, '>Revenue<'
+    assert_includes svg, '>Forecast<'
   end
 
   def test_negative_line_chart_renders_zero_axis_line
