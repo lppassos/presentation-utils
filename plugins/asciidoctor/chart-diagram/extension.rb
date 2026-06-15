@@ -12,7 +12,7 @@ module PresentationUtils
     class Error < StandardError; end
 
     class Parser
-      SUPPORTED_TYPES = %w[line bar column].freeze
+      SUPPORTED_TYPES = %w[line area bar column].freeze
       SUPPORTED_LEGENDS = %w[none left right bottom top-left top-right].freeze
 
       def parse(content_or_lines, document)
@@ -381,6 +381,7 @@ module PresentationUtils
       def render_series(data, dataset, layout, settings)
         case data['type']
         when 'line' then render_line_series(dataset, layout, settings)
+        when 'area' then render_area_series(dataset, layout, settings)
         when 'column' then render_column_series(dataset, layout, settings)
         when 'bar' then render_bar_series(dataset, layout, settings)
         else []
@@ -402,6 +403,26 @@ module PresentationUtils
             lines << %(<circle cx="#{format_number(x)}" cy="#{format_number(y)}" r="4" fill="#{color}"/>)
           end
           lines
+        end
+      end
+
+      def render_area_series(dataset, layout, settings)
+        zero_y = value_to_y(0.0, layout, dataset)
+        dataset['series'].each_with_index.flat_map do |series, idx|
+          color = palette_color(settings, idx)
+          points = series['values'].each_with_index.map do |value, category_index|
+            [category_center(category_index, dataset, layout), value_to_y(value, layout, dataset)]
+          end
+          line_d = points.each_with_index.map do |(x, y), i|
+            "#{i.zero? ? 'M' : 'L'} #{format_number(x)} #{format_number(y)}"
+          end.join(' ')
+          first_x = format_number(points.first[0])
+          last_x  = format_number(points.last[0])
+          fill_d  = "#{line_d} L #{last_x} #{format_number(zero_y)} L #{first_x} #{format_number(zero_y)} Z"
+          [
+            %(<path d="#{fill_d}" fill="#{color}" fill-opacity="0.18" stroke="none"/>),
+            %(<path d="#{line_d}" fill="none" stroke="#{color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>)
+          ]
         end
       end
 
@@ -474,9 +495,12 @@ module PresentationUtils
         dataset['series'].each_with_index do |series, index|
           y = box[:y] + 18 + (index * (settings[:tick_font_size] + 10))
           color = palette_color(settings, index)
-          if chart_type == 'line'
+          if %w[line area].include?(chart_type)
             lines << %(<line x1="#{format_number(box[:x] + 12)}" y1="#{format_number(y - 4)}" x2="#{format_number(box[:x] + 32)}" y2="#{format_number(y - 4)}" stroke="#{color}" stroke-width="3" stroke-linecap="round"/>)
             lines << %(<circle cx="#{format_number(box[:x] + 22)}" cy="#{format_number(y - 4)}" r="3" fill="#{color}"/>)
+            if chart_type == 'area'
+              lines << %(<rect x="#{format_number(box[:x] + 12)}" y="#{format_number(y - 1)}" width="20" height="6" fill="#{color}" fill-opacity="0.18" stroke="none"/>)
+            end
           else
             lines << %(<rect x="#{format_number(box[:x] + 12)}" y="#{format_number(y - 10)}" width="18" height="10" rx="2" fill="#{color}"/>)
           end
