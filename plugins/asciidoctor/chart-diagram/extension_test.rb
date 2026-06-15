@@ -354,6 +354,42 @@ class TestChartRenderer < Minitest::Test
     refute_includes svg, '<circle cx="632" cy="98" r="4" fill="#4b8bbf"/>'
   end
 
+  def test_renders_area_chart_fill_and_stroke
+    svg = chart_renderer.render(@document, {
+                                  'type' => 'area',
+                                  'legend' => 'none',
+                                  'dataset' => @dataset
+                                })
+
+    assert_includes svg, 'fill-opacity="0.18"'
+    assert_includes svg, 'fill="none" stroke="#4b8bbf"'
+    assert_includes svg, 'fill="none" stroke="#c2410c"'
+    assert_operator svg.scan(/fill-opacity="0\.18"/).length, :==, 2
+  end
+
+  def test_area_fill_closes_back_to_zero_baseline
+    svg = chart_renderer.render(@document, {
+                                  'type' => 'area',
+                                  'legend' => 'none',
+                                  'dataset' => @dataset
+                                })
+
+    assert_match(/ Z"/, svg)
+  end
+
+  def test_area_legend_shows_line_and_fill_sample
+    svg = chart_renderer.render(@document, {
+                                  'type' => 'area',
+                                  'legend' => 'right',
+                                  'dataset' => @dataset
+                                })
+
+    assert_includes svg, '<line x1='
+    assert_includes svg, 'fill-opacity="0.18"'
+    assert_includes svg, '>actual<'
+    assert_includes svg, '>forecast<'
+  end
+
   def test_negative_line_chart_renders_zero_axis_line
     neg_dataset = {
       'category_header' => 'month',
