@@ -32,8 +32,11 @@ RUN set -euo pipefail; \
     openjdk-17-jre-headless \
     qpdf \
     ruby-full \
+    ruby-dev \
     xvfb \
     xauth \
+    libonig-dev \
+    build-essential \
   && curl -fsSL -o /tmp/drawio.deb "$url" \
   && apt-get install -y --no-install-recommends /tmp/drawio.deb \
   && rm -rf /var/lib/apt/lists/* \
@@ -44,7 +47,8 @@ RUN gem install --no-document \
     asciidoctor \
     asciidoctor-pdf \
     asciidoctor-diagram \
-    kramdown-asciidoc
+    kramdown-asciidoc \
+    rouge
 
 RUN npm install -g --no-fund --no-audit @marp-team/marp-cli @marp-team/marp-core \
     highlight.js markdown-it-highlightjs mermaid @mermaid-js/mermaid-cli
