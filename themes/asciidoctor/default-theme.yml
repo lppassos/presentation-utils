@@ -101,3 +101,6 @@ custom-diagram:
   member-text-color: #ffffff
   member-role-color: #ffffff
   member-palette: #7890a1,#8aa0af,#6f8798,#9badba,#607888,#a5b5bf
+mermaid:
+  # Path to an mmdc JSON configuration file, relative to this theme file.
+  # config: default-mermaid-config.json
