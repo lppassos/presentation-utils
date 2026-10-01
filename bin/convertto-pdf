@@ -92,6 +92,7 @@ mkdir -p .imggen
 asciidoctor_args=(
   -r asciidoctor-pdf
   -r asciidoctor-diagram
+  -r /plugins/asciidoctor/mermaid-theme/extension.rb
   -r /plugins/asciidoctor/gantt-diagram/extension.rb
   -r /plugins/asciidoctor/chart-diagram/extension.rb
   -r /plugins/asciidoctor/custom-diagram/extension.rb

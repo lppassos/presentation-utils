@@ -63,6 +63,24 @@ Optimize/linearize (creates `*-out.pdf`):
 docker run --rm -v "${PWD}:/work" presentation-utils convertto-pdf documento.adoc --optimize
 ```
 
+#### Mermaid configuration from a PDF theme
+
+To apply one Mermaid CLI (`mmdc`) JSON configuration to every `[mermaid]` block,
+declare its path in the PDF theme. The path is resolved relative to the theme YAML
+file, not to the source document:
+
+```yaml
+# /themes/asciidoctor/acme.yml
+mermaid:
+  config: mermaid/acme.json
+```
+
+An explicit document `mermaid-config` attribute still takes precedence over the
+theme setting.
+
+See [Asciidoctor Mermaid themes](docs/asciidoctor-mermaid.md) for the complete
+configuration format and precedence rules.
+
 ### Convert Markdown to AsciiDoc
 
 ```bash
