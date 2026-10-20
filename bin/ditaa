@@ -1,0 +1,4 @@
+#!/bin/sh
+# Debian's /usr/bin/ditaa is a JAR and relies on binfmt_misc, which is not
+# available in ordinary containers. Launch Java explicitly in headless mode.
+exec java -Djava.awt.headless=true -jar /usr/share/ditaa/ditaa.jar "$@"
