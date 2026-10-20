@@ -23,6 +23,7 @@ RUN set -euo pipefail; \
     ca-certificates \
     chromium \
     curl \
+    ditaa \
     fontconfig \
     fonts-dejavu-core \
     fonts-liberation \

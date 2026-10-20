@@ -118,6 +118,23 @@ Pass extra marp args after `--`:
 docker run --rm -v "${PWD}:/work" presentation-utils convertto-presentation deck.md -- --bespoke.progress
 ```
 
+### ditaa diagrams in Marp
+
+Use a fenced `ditaa` block to render an ASCII diagram as a PNG. The container
+includes ditaa and its Java runtime; no additional host installation is needed.
+
+````markdown
+```ditaa [width:600px]
++---------+     +---------+
+| Input   |---->| Output  |
++---------+     +---------+
+```
+````
+
+The bracketed Marp image options are optional. Generated images are cached in
+`.imggen/` next to the input Markdown and reused when the diagram is unchanged.
+If rendering fails, a warning is emitted and the original code block is retained.
+
 ## Git Bash / MSYS2
 
 ## Windows Path Notes

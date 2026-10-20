@@ -41,7 +41,11 @@ const {
   preprocess: mermaidPreprocess,
 } = require("/plugins/marp/mermaid-diagram/index.js");
 
-const preprocessors = [drawioPreprocess, mermaidPreprocess];
+const {
+  preprocess: ditaaPreprocess,
+} = require("/plugins/marp/ditaa-diagram/index.js");
+
+const preprocessors = [drawioPreprocess, mermaidPreprocess, ditaaPreprocess];
 
 // ---------------------------------------------------------------------------
 // Main
