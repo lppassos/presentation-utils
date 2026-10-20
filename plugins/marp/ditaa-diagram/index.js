@@ -5,54 +5,67 @@ const fs = require("node:fs");
 const cp = require("node:child_process");
 const crypto = require("node:crypto");
 
-function conversionNeeded(pngAbsPath) {
-  return !fs.existsSync(pngAbsPath);
-}
-
-/** Render UTF-8 ASCII art with the ditaa CLI bundled in the container. */
-function convertToImg(content, pngAbsPath) {
-  fs.mkdirSync(path.dirname(pngAbsPath), { recursive: true });
-  const tmpDir = fs.mkdtempSync(path.join(path.dirname(pngAbsPath), ".ditaa-"));
-  const tmpSource = path.join(tmpDir, "source.ditaa");
-  const tmpPng = path.join(tmpDir, "output.png");
-  try {
-    fs.writeFileSync(tmpSource, content, "utf8");
-    const result = cp.spawnSync(
-      // Debian's /usr/bin/ditaa is a JAR, not a shell launcher. Invoking Java
-      // explicitly avoids relying on binfmt_misc support inside Docker.
-      "java",
-      ["-Djava.awt.headless=true", "-jar", "/usr/bin/ditaa", "--overwrite", "--encoding", "UTF-8", tmpSource, tmpPng],
-      { encoding: "utf8" },
+function run(command, args) {
+  const result = cp.spawnSync(command, args, { encoding: "utf8" });
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `${command} failed: ${
+        result.error?.message ||
+        ((result.stdout || "") + (result.stderr || "")).trim() ||
+        `exit ${result.status}`
+      }`,
     );
-    if (result.error) throw result.error;
-    if (result.status !== 0) {
-      const output = (result.stdout || "") + (result.stderr || "");
-      throw new Error(`ditaa export failed (exit ${result.status}): ${output.trim()}`);
-    }
-    if (!fs.existsSync(tmpPng)) {
-      throw new Error("ditaa did not create the requested PNG");
-    }
-    // Publish only completed images. Concurrent renders own separate temp files.
-    fs.renameSync(tmpPng, pngAbsPath);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
-/**
- * Replace fenced ditaa blocks with content-addressed PNG references, just like
- * the Mermaid preprocessor. Optional [width:... height:...] image options are
- * passed through to Marp. Failed renders leave the original fence untouched.
- */
-function preprocess(markdownText, { inputDir }) {
-  function renderBlock(match, options, content) {
-    const hash = crypto.createHash("sha256").update(content).digest("hex");
-    const pngRelPath = `.imggen/ditaa-${hash}.png`;
-    const pngAbsPath = path.join(inputDir, pngRelPath);
+/** Render to a temporary PNG so a failed inversion never poisons the cache. */
+function convertToImg(content, pngPath, { transparent, invert }) {
+  fs.mkdirSync(path.dirname(pngPath), { recursive: true });
+  const tempDir = fs.mkdtempSync(path.join(path.dirname(pngPath), ".ditaa-"));
+  const source = path.join(tempDir, "diagram.txt");
+  const rendered = path.join(tempDir, "diagram.png");
+  try {
+    fs.writeFileSync(source, content, "utf8");
+    const args = ["--encoding", "UTF-8"];
+    if (transparent) args.push("--transparent", "--no-shadows");
+    run("ditaa", [...args, source, rendered]);
+    if (invert) {
+      // Negate RGB only: the alpha channel must remain unchanged.
+      run("magick", [
+        rendered,
+        "-channel",
+        "RGB",
+        "-negate",
+        "+channel",
+        rendered,
+      ]);
+    }
+    fs.renameSync(rendered, pngPath);
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
 
-    if (conversionNeeded(pngAbsPath)) {
+/** Replace ditaa fences with cached PNGs, retaining Marp image options. */
+function preprocess(markdownText, { inputDir }) {
+  const fence =
+    /^```ditaa(?:[ \t]*\[([^\]\r\n]*)\])?[ \t]*\r?\n([\s\S]*?)^```[ \t]*(?=\r?$)/gm;
+  return markdownText.replace(fence, (match, options = "", content) => {
+    const tokens = options
+      .trim()
+      .split(/[\s,]+/)
+      .filter(Boolean);
+    const transparent = tokens.includes("transparent");
+    const invert = tokens.includes("invert");
+    const hash = crypto
+      .createHash("sha256")
+      .update(JSON.stringify({ content, transparent, invert }))
+      .digest("hex");
+    const relativePath = `.imggen/ditaa-${hash}.png`;
+    const pngPath = path.join(inputDir, relativePath);
+    if (!fs.existsSync(pngPath)) {
       try {
-        convertToImg(content, pngAbsPath);
+        convertToImg(content, pngPath, { transparent, invert });
       } catch (err) {
         process.stderr.write(
           `[ditaa-diagram] warning: conversion failed, skipping: ${err.message}\n`,
@@ -60,33 +73,11 @@ function preprocess(markdownText, { inputDir }) {
         return match;
       }
     }
-
-    return `![${options || ""}](${pngRelPath})`;
-  }
-
-  // Walk complete Markdown fences so examples inside longer fences (and other
-  // code blocks) remain literal rather than being rendered as diagrams.
-  const opening = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)\r?\n/gm;
-  let result = "";
-  let cursor = 0;
-  let block;
-  while ((block = opening.exec(markdownText))) {
-    const marker = block[1];
-    const closing = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*(?=\\r?$)`, "gm");
-    closing.lastIndex = opening.lastIndex;
-    const end = closing.exec(markdownText);
-    if (!end) break;
-    const info = /^ditaa(?:[ \t]+\[([^\]\r\n]*)\])?[ \t]*$/.exec(block[2]);
-    const blockEnd = closing.lastIndex;
-    result += markdownText.slice(cursor, block.index);
-    const original = markdownText.slice(block.index, blockEnd);
-    result += info
-      ? renderBlock(original, info[1], markdownText.slice(opening.lastIndex, end.index))
-      : original;
-    cursor = blockEnd;
-    opening.lastIndex = blockEnd;
-  }
-  return result + markdownText.slice(cursor);
+    const imageOptions = tokens.filter(
+      (token) => token !== "transparent" && token !== "invert",
+    );
+    return `![${imageOptions.join(" ")}](${relativePath})`;
+  });
 }
 
-module.exports = { preprocess, conversionNeeded, convertToImg };
+module.exports = { preprocess, convertToImg };

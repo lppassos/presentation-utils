@@ -1,6 +1,7 @@
 FROM debian:bookworm-slim
 
 ARG DRAWIO_VERSION=24.7.17
+ARG IMAGEMAGICK_VERSION=7.1.1-47
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
@@ -37,12 +38,34 @@ RUN set -euo pipefail; \
     xvfb \
     xauth \
     libonig-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    xz-utils \
     build-essential \
   && curl -fsSL -o /tmp/drawio.deb "$url" \
   && apt-get install -y --no-install-recommends /tmp/drawio.deb \
   && rm -rf /var/lib/apt/lists/* \
   && rm -f /tmp/drawio.deb \
   && ln -s /usr/bin/chromium /usr/bin/google-chrome
+
+# Bookworm packages ImageMagick 6, which has no `magick` command. Build v7
+# explicitly, including PNG support for ditaa color inversion.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends pkg-config \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL "https://download.imagemagick.org/archive/releases/ImageMagick-${IMAGEMAGICK_VERSION}.tar.xz" \
+      -o /tmp/imagemagick.tar.xz \
+    && mkdir /tmp/imagemagick \
+    && tar -xJf /tmp/imagemagick.tar.xz -C /tmp/imagemagick --strip-components=1 \
+    && cd /tmp/imagemagick \
+    && ./configure --without-modules --without-perl --without-x \
+    && make -j"$(nproc)" \
+    && make install \
+    && ldconfig \
+    && magick -version \
+    && magick -size 1x1 xc:none /tmp/magick-check.png \
+    && rm -rf /tmp/imagemagick /tmp/imagemagick.tar.xz /tmp/magick-check.png
 
 RUN gem install --no-document \
     asciidoctor \
@@ -71,6 +94,7 @@ COPY themes/marp/ /themes/marp/
 
 
 COPY bin/convertto-asciidoc /usr/local/bin/convertto-asciidoc
+COPY bin/ditaa /usr/local/bin/ditaa
 COPY bin/convertto-pdf /usr/local/bin/convertto-pdf
 COPY bin/convertto-png /usr/local/bin/convertto-png
 COPY bin/convertto-presentation /usr/local/bin/convertto-presentation
@@ -84,6 +108,7 @@ COPY plugins/asciidoctor/ /plugins/asciidoctor/
 COPY plugins/marp/ /plugins/marp/
 
 RUN chmod +x \
+    /usr/local/bin/ditaa \
     /usr/local/bin/convertto-asciidoc \
     /usr/local/bin/convertto-pdf \
     /usr/local/bin/convertto-png \

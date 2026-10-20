@@ -148,3 +148,22 @@ When running from Git Bash on Windows, disable path conversion:
 ```bash
 MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W):/work" presentation-utils convertto-pdf documento.adoc
 ```
+
+## Ditaa diagrams in Marp
+
+Use a `ditaa` fenced block to render an ASCII diagram as a cached PNG:
+
+````markdown
+```ditaa [transparent invert w:600]
++---------+     +---------+
+| Source  |---->| Target  |
++---------+     +---------+
+```
+````
+
+The optional square brackets accept `transparent` (fully transparent canvas,
+without shadows) and `invert` (invert PNG colors using ImageMagick while
+preserving alpha). Use either option independently or combine them. Remaining
+options, such as `w:600`, are passed to Marp as image options. Generated images
+are cached in `.imggen`, with separate entries for each rendering option
+combination. The container includes ditaa and ImageMagick 7 (`magick`).

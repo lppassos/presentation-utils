@@ -1,133 +1,103 @@
 "use strict";
 
-// Run: node --test plugins/marp/ditaa-diagram/index.test.js
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
-const crypto = require("node:crypto");
 const cp = require("node:child_process");
-const { preprocess, conversionNeeded, convertToImg } = require("./index.js");
+const { preprocess } = require("./index.js");
 
-const content = "+-----+\n| Box |\n+-----+\n";
-const fence = (source = content) => `\`\`\`ditaa\n${source}\`\`\`\n`;
-const imagePath = (source) =>
-  `.imggen/ditaa-${crypto.createHash("sha256").update(source).digest("hex")}.png`;
-
-function setup(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ditaa-diagram-test-"));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  return dir;
+function setup(t, failCommand) {
+  const inputDir = fs.mkdtempSync(path.join(os.tmpdir(), "ditaa-test-"));
+  t.after(() => fs.rmSync(inputDir, { recursive: true, force: true }));
+  const calls = [];
+  t.mock.method(cp, "spawnSync", (command, args) => {
+    calls.push({ command, args });
+    if (command === "ditaa") {
+      assert.match(fs.readFileSync(args.at(-2), "utf8"), /Source/);
+      fs.writeFileSync(args.at(-1), "rendered PNG");
+    }
+    return command === failCommand
+      ? { status: 1, stderr: "test failure" }
+      : { status: 0 };
+  });
+  return { inputDir, calls };
 }
 
-function renderer(t, fn) {
-  return t.mock.method(cp, "spawnSync", fn || ((_cmd, args) => {
-    fs.writeFileSync(args[args.length - 1], "PNG");
-    return { status: 0 };
-  }));
+function diagram(options = "") {
+  return `\`\`\`ditaa${options}\n+--------+\n| Source |\n+--------+\n\`\`\`\n`;
 }
 
-test("unrelated Markdown and other diagram blocks are unchanged", (t) => {
-  const dir = setup(t);
-  const spawn = renderer(t);
-  const md = "# Slide\n```mermaid\ngraph TD\n```\n```ditaax\ntext\n```\n";
-  assert.equal(preprocess(md, { inputDir: dir }), md);
-  assert.equal(spawn.mock.callCount(), 0);
-});
-
-test("renders using UTF-8 CLI arguments, cleans source, and produces an image", (t) => {
-  const dir = setup(t);
-  const spawn = renderer(t);
-  const png = path.join(dir, imagePath(content));
-  assert.equal(conversionNeeded(png), true);
-  assert.equal(preprocess(fence(), { inputDir: dir }), `![](${imagePath(content)})\n`);
-  assert.equal(conversionNeeded(png), false);
-  const { arguments: [cmd, args, options] } = spawn.mock.calls[0];
-  assert.equal(cmd, "java");
-  assert.deepEqual(args.slice(0, 6), ["-Djava.awt.headless=true", "-jar", "/usr/bin/ditaa", "--overwrite", "--encoding", "UTF-8"]);
-  assert.equal(fs.existsSync(path.dirname(args[6])), false);
-  assert.equal(options.encoding, "utf8");
-  assert.equal(fs.existsSync(args[6]), false);
-});
-
-test("preserves Marp image options and CRLF input", (t) => {
-  const dir = setup(t);
-  renderer(t);
-  const source = content.replace(/\n/g, "\r\n");
-  const md = `\`\`\`ditaa [width:600px height:200px]\r\n${source}\`\`\`\r\n`;
-  assert.equal(preprocess(md, { inputDir: dir }), `![width:600px height:200px](${imagePath(source)})\r\n`);
-});
-
-test("identical blocks and later calls use cached PNGs; changed content renders separately", (t) => {
-  const dir = setup(t);
-  const spawn = renderer(t);
-  const second = content.replace("Box", "Two");
-  const md = fence() + fence() + fence(second);
-  const expected = `![](${imagePath(content)})\n![](${imagePath(content)})\n![](${imagePath(second)})\n`;
-  assert.equal(preprocess(md, { inputDir: dir }), expected);
-  assert.equal(spawn.mock.callCount(), 2);
-  assert.equal(preprocess(md, { inputDir: dir }), expected);
-  assert.equal(spawn.mock.callCount(), 2);
-});
-
-for (const failure of ["exit", "missing executable", "missing output", "throw"]) {
-  test(`failed render (${failure}) retains fence, warns, and removes temporary/partial files`, (t) => {
-    const dir = setup(t);
-    renderer(t, (_cmd, args) => {
-      assert.equal(fs.readFileSync(args[6], "utf8"), content);
-      if (failure === "missing output") return { status: 0 };
-      fs.writeFileSync(args[7], "partial PNG");
-      if (failure === "throw") throw new Error("spawn failed");
-      if (failure === "missing executable") return { status: null, error: new Error("ENOENT") };
-      return { status: 1, stderr: "bad diagram" };
-    });
-    const warnings = [];
-    t.mock.method(process.stderr, "write", (text) => { warnings.push(text); return true; });
-    assert.equal(preprocess(fence(), { inputDir: dir }), fence());
-    assert.match(warnings.join(""), /\[ditaa-diagram\] warning: conversion failed/);
-    assert.deepEqual(fs.readdirSync(path.join(dir, ".imggen")), []);
+for (const [options, transparent, invert] of [
+  ["", false, false],
+  [" [transparent]", true, false],
+  [" [invert]", false, true],
+  [" [transparent invert w:600]", true, true],
+]) {
+  test(`renders ditaa ${options || "without options"}`, t => {
+    const context = setup(t);
+    const result = preprocess(diagram(options), context);
+    assert.match(result, /^!\[(?:w:600)?\]\(\.imggen\/ditaa-[a-f0-9]{64}\.png\)\n$/);
+    const [render, inversion] = context.calls;
+    assert.equal(render.command, "ditaa");
+    assert.equal(render.args.includes("--transparent"), transparent);
+    assert.equal(render.args.includes("--no-shadows"), transparent);
+    assert.deepEqual(render.args.slice(0, 2), ["--encoding", "UTF-8"]);
+    assert.equal(context.calls.length, invert ? 2 : 1);
+    if (invert) {
+      assert.equal(inversion.command, "magick");
+      assert.deepEqual(inversion.args.slice(1, -1), ["-channel", "RGB", "-negate", "+channel"]);
+      assert.equal(inversion.args[0], inversion.args.at(-1));
+    }
+    const files = fs.readdirSync(path.join(context.inputDir, ".imggen"));
+    assert.equal(files.length, 1, "only the completed PNG remains");
+    assert.match(files[0], /\.png$/);
   });
 }
 
-test("unterminated blocks and invalid closing fences are untouched", (t) => {
-  const dir = setup(t);
-  const spawn = renderer(t);
-  const md = `\`\`\`ditaa\n${content}\`\`\`not-a-closing-fence\n`;
-  assert.equal(preprocess(md, { inputDir: dir }), md);
-  assert.equal(spawn.mock.callCount(), 0);
+test("cache varies by rendering flags but not their order or Marp sizing", t => {
+  const context = setup(t);
+  const results = ["", " [transparent]", " [invert]", " [transparent invert]"]
+    .map(options => preprocess(diagram(options), context));
+  assert.equal(new Set(results).size, 4);
+  assert.equal(context.calls.length, 6);
+  const cached = preprocess(diagram(" [invert transparent w:600]"), context);
+  assert.equal(cached.replace("w:600", ""), results[3]);
+  assert.equal(context.calls.length, 6, "cached combined render is reused");
 });
 
-test("ditaa examples inside other fences stay literal", (t) => {
-  const dir = setup(t);
-  const spawn = renderer(t);
-  for (const md of [`\`\`\`\`markdown\n${fence()}\`\`\`\`\n`, `~~~markdown\n${fence()}~~~\n`]) {
-    assert.equal(preprocess(md, { inputDir: dir }), md);
-  }
-  assert.equal(spawn.mock.callCount(), 0);
-});
-
-test("real ditaa CLI creates a PNG without a display", { skip: !process.env.DITAA_SMOKE_TEST }, (t) => {
-  const dir = setup(t);
-  const png = path.join(dir, "smoke.png");
-  convertToImg(content, png);
-  assert.equal(fs.readFileSync(png).subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
-  assert.equal(fs.existsSync(path.join(dir, "smoke.ditaa")), false);
-});
-
-test("container preprocessing pipeline loads ditaa and writes rendered Markdown", { skip: !process.env.DITAA_SMOKE_TEST }, (t) => {
-  const dir = setup(t);
-  const input = path.join(dir, "deck.md");
-  fs.writeFileSync(input, `---\nmarp: true\n---\n${fence()}`);
-  const pipeline = path.resolve(__dirname, "../../../bin/marp-preprocess.mjs");
-  const result = cp.spawnSync(process.execPath, [pipeline, input], {
-    cwd: dir,
-    encoding: "utf8",
+for (const command of ["ditaa", "magick"]) {
+  test(`${command} failure preserves source and does not cache partial PNG`, t => {
+    const context = setup(t, command);
+    const markdown = diagram(" [transparent invert]");
+    assert.equal(preprocess(markdown, context), markdown);
+    assert.deepEqual(fs.readdirSync(path.join(context.inputDir, ".imggen")), []);
+    preprocess(markdown, context);
+    assert.equal(context.calls.filter(call => call.command === "ditaa").length, 2);
   });
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stderr, "");
-  const output = fs.readFileSync(path.resolve(dir, result.stdout.trim()), "utf8");
-  assert.match(output, /!\[\]\(\.imggen\/ditaa-[a-f0-9]{64}\.png\)/);
-  const png = path.join(dir, imagePath(content));
-  assert.equal(fs.readFileSync(png).subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+}
+
+test("a missing executable preserves source and cleans up", t => {
+  const context = setup(t);
+  t.mock.method(cp, "spawnSync", () => ({ status: null, error: new Error("ENOENT") }));
+  const markdown = diagram(" [invert]");
+  assert.equal(preprocess(markdown, context), markdown);
+  assert.deepEqual(fs.readdirSync(path.join(context.inputDir, ".imggen")), []);
+});
+
+test("supports CRLF and comma-separated flags, without matching option substrings", t => {
+  const context = setup(t);
+  assert.match(preprocess(diagram("[transparent,invert]").replace(/\n/g, "\r\n"), context), /^!\[\]/);
+  assert.equal(context.calls.length, 2);
+  preprocess(diagram(" [not-transparent not-invert]"), context);
+  assert.equal(context.calls.length, 3);
+  assert.equal(context.calls[2].args.includes("--transparent"), false);
+});
+
+test("leaves other markdown untouched", t => {
+  const context = setup(t);
+  const markdown = "# Slide\n```text\nSource\n```\n";
+  assert.equal(preprocess(markdown, context), markdown);
+  assert.equal(context.calls.length, 0);
 });
